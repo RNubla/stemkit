@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
+  LyricsData,
   Song,
   StemId,
   StemPanMap,
-  LyricsData,
 } from "../../../shared/types";
 import { type BufferMap, decodePayload, engine } from "../lib/engine";
 import { buildStemMeta } from "../lib/stems";
@@ -57,6 +57,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(song.duration || 0);
   const [bump, setBump] = useState(0);
+  const [position, setPosition] = useState(0);
   const [buffers, setBuffers] = useState<BufferMap>({});
 
   const [vols, setVols] = useState<Partial<Record<StemId, number>>>({});
@@ -182,7 +183,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
       })
       .catch(() => {
         if (!cancelled) {
-          setLyrics({ lines: [], source: 'none', synced: false });
+          setLyrics({ lines: [], source: "none", synced: false });
         }
       });
     return () => {
@@ -265,11 +266,14 @@ export function Player({ song, settings }: Props): React.ReactElement {
     if (!playing) return;
     let raf = 0;
     const tick = (): void => {
-      posRef.current = engine.expected();
+      const pos = engine.expected();
+      posRef.current = pos;
+      setPosition(pos);
 
       const dur = engine.trackDuration();
-      if (dur > 0 && posRef.current >= dur - 0.03) {
+      if (dur > 0 && pos >= dur - 0.03) {
         posRef.current = dur;
+        setPosition(dur);
         engine.stopAll();
         playingRef.current = false;
         setPlaying(false);
@@ -342,8 +346,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
 
   const getPosition = useCallback((): number => {
     void bump;
-    return posRef.current;
-  }, [bump]);
+    return position;
+  }, [bump, position]);
 
   const exportStem = useCallback(
     (stem: string): void => {
@@ -434,22 +438,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
     <div className="h-full flex flex-col">
       <header className="drag-region h-14 shrink-0 flex items-center justify-between px-6">
         <h2 className="text-sm font-semibold truncate">{song.title}</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowLyrics(!showLyrics)}
-            className={`glass rounded-xl px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2 ${
-              showLyrics
-                ? 'text-white bg-white/10'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-            title="Toggle lyrics"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Lyrics
-          </button>
-        </div>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
@@ -537,12 +525,38 @@ export function Player({ song, settings }: Props): React.ReactElement {
             </aside> */
             }
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLyrics(!showLyrics)}
+              className={`glass rounded-xl px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2 ${
+                showLyrics
+                  ? "text-white bg-white/10"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              }`}
+              title="Toggle lyrics"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              Lyrics
+            </button>
+          </div>
 
           {showLyrics && (
             <div className="mt-4 glass rounded-2xl overflow-hidden">
               <LyricsDisplay
                 lyrics={lyrics}
-                currentTime={posRef.current}
+                currentTime={position}
                 duration={duration}
                 className="h-96"
               />
