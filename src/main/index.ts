@@ -32,13 +32,67 @@ import {
 import { loadSettings, saveSettings } from './settings'
 import {
   loadSongs, removeSong, stemBuffers, stemsDir, stemsFor, mixWavPath,
-  AUDIO_EXTENSIONS, loadStemPan, saveStemPan
+  AUDIO_EXTENSIONS, loadStemPan, saveStemPan, loadLyrics, saveLyrics
 } from './library'
 import { startJob, startLocalJob, cancelJob, searchYouTube } from './pipeline'
 import { initUpdater } from './updater'
 import { runSmoke } from './smoke'
 import { getThumb, clearThumbMemo } from './thumbs'
 import { maybePing } from './telemetry'
+
+async function fetchLyrics(videoId: string, title: string, artist?: string): Promise<{ lines: { time: number; text: string }[]; source: string; synced: boolean }> {
+  // Try multiple lyrics sources
+  const searchQuery = artist ? `${artist} ${title}` : title
+
+  // Source 1: Try LRCLIB (synced lyrics API)
+  try {
+    const response = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`)
+    if (response.ok) {
+      const results = await response.json() as Array<{ syncedLyrics: string; plainLyrics: string; trackName: string; artistName: string }>
+      if (results.length > 0) {
+        const best = results[0]
+        if (best.syncedLyrics) {
+          const lines = parseLrc(best.syncedLyrics)
+          if (lines.length > 0) {
+            return { lines, source: 'lrclib', synced: true }
+          }
+        }
+        if (best.plainLyrics) {
+          const lines = parsePlainLyrics(best.plainLyrics)
+          return { lines, source: 'lrclib', synced: false }
+        }
+      }
+    }
+  } catch {
+    // Ignore and try next source
+  }
+
+  // Source 2: Try Genius (via textise dot iitty)
+  // For now, return empty - can be extended with more sources
+  return { lines: [], source: 'none', synced: false }
+}
+
+function parseLrc(lrc: string): { time: number; text: string }[] {
+  const lines: { time: number; text: string }[] = []
+  const regex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]\s*(.*)/g
+  let match
+  while ((match = regex.exec(lrc)) !== null) {
+    const minutes = parseInt(match[1], 10)
+    const seconds = parseInt(match[2], 10)
+    const ms = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) : 0
+    const time = minutes * 60 + seconds + ms / 1000
+    const text = match[4].trim()
+    if (text) lines.push({ time, text })
+  }
+  return lines
+}
+
+function parsePlainLyrics(text: string): { time: number; text: string }[] {
+  return text.split('\n').filter(l => l.trim()).map((line, i) => ({
+    time: i * 4, // rough estimate: 4 seconds per line
+    text: line.trim()
+  }))
+}
 
 let mainWindow: BrowserWindow | null = null
 let staticServer: Server | null = null
@@ -334,6 +388,28 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('search:youtube', (_e, query: string) => searchYouTube(query))
+  ipcMain.handle('lyrics:get', async (_e, videoId: string, title: string, artist?: string) => {
+    // First check local cache
+    const cached = loadLyrics(videoId)
+    if (cached) return cached
+    // Otherwise fetch from online sources
+    return await fetchLyrics(videoId, title, artist)
+  })
+  ipcMain.handle('lyrics:save', (_e, videoId: string, lyrics: unknown) => {
+    // Validate lyrics structure before saving
+    const data = lyrics as { lines: unknown[]; source: unknown; synced: unknown }
+    if (!data || !Array.isArray(data.lines) || typeof data.source !== 'string' || typeof data.synced !== 'boolean') {
+      throw new Error('Invalid lyrics format')
+    }
+    // Validate each line
+    for (const line of data.lines) {
+      if (!line || typeof line !== 'object' || typeof (line as Record<string, unknown>).time !== 'number' || typeof (line as Record<string, unknown>).text !== 'string') {
+        throw new Error('Invalid lyrics line format')
+      }
+    }
+    saveLyrics(videoId, data as { lines: { time: number; text: string }[]; source: string; synced: boolean })
+  })
+
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('settings:get', () => loadSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {

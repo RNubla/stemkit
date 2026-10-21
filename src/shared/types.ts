@@ -110,6 +110,17 @@ export interface SearchResult {
   duration?: number
 }
 
+export interface LyricsLine {
+  time: number
+  text: string
+}
+
+export interface LyricsData {
+  lines: LyricsLine[]
+  source: string
+  synced: boolean
+}
+
 export interface UpdateEvent {
   status: 'checking' | 'available' | 'none' | 'progress' | 'downloaded' | 'error'
   version?: string
@@ -147,4 +158,7 @@ export interface StemKitApi {
   onJobEvent(cb: (ev: JobEvent) => void): () => void
   onEnvEvent(cb: (ev: EnvEvent) => void): () => void
   onSettingsChange(cb: (settings: AppSettings) => void): () => void
+  // Lyrics
+  getLyrics(videoId: string, title: string, artist?: string): Promise<LyricsData>
+  saveLyrics(videoId: string, lyrics: LyricsData): Promise<void>
 }

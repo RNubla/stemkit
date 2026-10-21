@@ -4,15 +4,15 @@ import type {
   Song,
   StemId,
   StemPanMap,
+  LyricsData,
 } from "../../../shared/types";
 import { type BufferMap, decodePayload, engine } from "../lib/engine";
 import { buildStemMeta } from "../lib/stems";
-import { fmtTime } from "../lib/format";
-import { SongThumb } from "../lib/thumbs";
 import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
-import { DownloadIcon } from "./Icons";
+import { LyricsDisplay } from "./LyricsDisplay";
+import { getLyrics } from "../lib/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
 const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
@@ -71,6 +71,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [solos, setSolos] = useState<Set<StemId>>(new Set());
   const [master, setMaster] = useState(0.9);
   const [preset, setPreset] = useState<PresetId | "custom">("all");
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [lyrics, setLyrics] = useState<LyricsData | null>(null);
 
   const stemMeta = useMemo(
     () => buildStemMeta(Object.keys(buffers) as StemId[]),
@@ -86,11 +88,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
   // stems always play locally from the library; hiding the video just stops
   // streaming it from YouTube (and switches thumbnails to the local cache)
   const showVideo = !(settings?.hideVideo ?? false) && !isLocal;
-  const addedLabel = new Date(song.addedAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 
   useEffect(() => {
     const generation = ++panGeneration.current;
@@ -172,6 +169,26 @@ export function Player({ song, settings }: Props): React.ReactElement {
       hostRef.current = null;
     };
   }, [song.videoId]);
+
+  // Load lyrics when song changes
+  useEffect(() => {
+    let cancelled = false;
+    setLyrics(null);
+    getLyrics(song.videoId, song.title)
+      .then((data) => {
+        if (!cancelled) {
+          setLyrics(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLyrics({ lines: [], source: 'none', synced: false });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [song.videoId, song.title]);
 
   useEffect(() => {
     if (!showVideo) {
@@ -335,10 +352,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
     [song.videoId],
   );
 
-  const exportAllStems = useCallback((): void => {
-    void window.stemkit.exportAllStems(song.videoId);
-  }, [song.videoId]);
-
   const applyPreset = (p: PresetId): void => {
     setPreset(p);
     setMutes(new Set());
@@ -421,6 +434,22 @@ export function Player({ song, settings }: Props): React.ReactElement {
     <div className="h-full flex flex-col">
       <header className="drag-region h-14 shrink-0 flex items-center justify-between px-6">
         <h2 className="text-sm font-semibold truncate">{song.title}</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLyrics(!showLyrics)}
+            className={`glass rounded-xl px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2 ${
+              showLyrics
+                ? 'text-white bg-white/10'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="Toggle lyrics"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Lyrics
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
@@ -509,13 +538,24 @@ export function Player({ song, settings }: Props): React.ReactElement {
             }
           </div>
 
+          {showLyrics && (
+            <div className="mt-4 glass rounded-2xl overflow-hidden">
+              <LyricsDisplay
+                lyrics={lyrics}
+                currentTime={posRef.current}
+                duration={duration}
+                className="h-96"
+              />
+            </div>
+          )}
+
           <Transport
             playing={playing}
             duration={duration}
             getPosition={getPosition}
             onTogglePlay={togglePlay}
             onSeek={seekTo}
-            preset={preset === "custom" ? "all" : preset}
+            preset={preset === "custom" ? "karaoke" : preset}
             onPreset={applyPreset}
             master={master}
             onMaster={setMaster}

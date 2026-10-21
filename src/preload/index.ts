@@ -39,7 +39,10 @@ const api: StemKitApi = {
   onShowAbout: (cb) => subscribe<void>('app:show-about', cb),
   onJobEvent: (cb) => subscribe<JobEvent>('job:event', cb),
   onEnvEvent: (cb) => subscribe<EnvEvent>('env:event', cb),
-  onSettingsChange: (cb) => subscribe<AppSettings>('settings:changed', cb)
+  onSettingsChange: (cb) => subscribe<AppSettings>('settings:changed', cb),
+  // Lyrics
+  getLyrics: (videoId, title, artist) => ipcRenderer.invoke('lyrics:get', videoId, title, artist),
+  saveLyrics: (videoId, lyrics) => ipcRenderer.invoke('lyrics:save', videoId, lyrics)
 }
 
 contextBridge.exposeInMainWorld('stemkit', api)
