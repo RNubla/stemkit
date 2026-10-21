@@ -97,9 +97,101 @@ async function fetchLyrics(
     // Ignore and try next source
   }
 
-  // Source 2: Try Genius (via textise dot iitty)
+  // Source 2: Try YouTube captions via yt-dlp
+  try {
+    const captionLines = await fetchYouTubeCaptions(videoId);
+    if (captionLines.length > 0) {
+      return { lines: captionLines, source: "youtube", synced: true };
+    }
+  } catch {
+    // Ignore and continue
+  }
+
+  // Source 3: Try Genius (via textise dot iitty)
   // For now, return empty - can be extended with more sources
   return { lines: [], source: "none", synced: false };
+}
+
+async function fetchYouTubeCaptions(videoId: string): Promise<{ time: number; text: string }[]> {
+  const { spawn } = await import('child_process');
+  const { venvYtDlp, ytDlpRuntimeArgs } = await import('./env');
+
+  // Use yt-dlp to get automatic captions
+  const args = [
+    ...ytDlpRuntimeArgs(),
+    '--no-warnings',
+    '--skip-download',
+    '--write-auto-sub',
+    '--sub-format', 'vtt',
+    '--sub-lang', 'en',
+    '--convert-subs', 'vtt',
+    '-o', '-', // output to stdout
+    `https://www.youtube.com/watch?v=${videoId}`
+  ];
+
+  return new Promise((resolve) => {
+    const child = spawn(venvYtDlp(), args, { env: { ...process.env } });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        resolve([]);
+        return;
+      }
+
+      // Parse VTT from stdout
+      const lines = parseVtt(stdout);
+      resolve(lines);
+    });
+
+    child.on('error', () => {
+      resolve([]);
+    });
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve([]);
+    }, 30000);
+  });
+}
+
+function parseVtt(vtt: string): { time: number; text: string }[] {
+  const lines: { time: number; text: string }[] = [];
+
+  // Split by cue blocks
+  const blocks = vtt.split('\n\n');
+
+  for (const block of blocks) {
+    const timeMatch = block.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->/);
+    if (!timeMatch) continue;
+
+    const hours = parseInt(timeMatch[1], 10);
+    const minutes = parseInt(timeMatch[2], 10);
+    const seconds = parseInt(timeMatch[3], 10);
+    const ms = parseInt(timeMatch[4], 10);
+
+    const time = hours * 3600 + minutes * 60 + seconds + ms / 1000;
+
+    // Get text (everything after the timestamp line)
+    const textLines = block.split('\n').slice(1).filter(l => l.trim());
+    const text = textLines.join(' ').replace(/<[^>]*>/g, '').trim(); // Remove VTT tags
+
+    if (text) {
+      lines.push({ time, text });
+    }
+  }
+
+  return lines;
 }
 
 function parseLrc(lrc: string): { time: number; text: string }[] {
