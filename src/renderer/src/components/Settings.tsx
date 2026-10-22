@@ -455,6 +455,46 @@ export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props)
                   onClick={() => onChange({ lyrics: { ...lyricsSettings, showTimestamps: !lyricsSettings.showTimestamps } })}
                 />
               </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">Text color</p>
+                  <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                    Custom lyric text color (used with Solid backdrop)
+                  </p>
+                </div>
+                <input
+                  type="color"
+                  value={lyricsSettings.color}
+                  onChange={(e) => onChange({ lyrics: { ...lyricsSettings, color: e.target.value } })}
+                  className="w-8 h-8 rounded-lg border-0 bg-transparent cursor-pointer"
+                  aria-label="Lyrics text color"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">Backdrop mode</p>
+                  <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                    Auto uses contrast shadows; Solid uses your color with a dark backdrop
+                  </p>
+                </div>
+                <div className="flex shrink-0 rounded-lg bg-white/[0.06] p-0.5 border border-white/[0.08]">
+                  {(['auto', 'solid'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => onChange({ lyrics: { ...lyricsSettings, backdropMode: mode } })}
+                      className={`no-drag px-3 h-6 rounded-md text-[12px] font-semibold transition-colors ${
+                        lyricsSettings.backdropMode === mode
+                          ? 'bg-white text-black'
+                          : 'text-white/45 hover:text-white/80'
+                      }`}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
         </div>

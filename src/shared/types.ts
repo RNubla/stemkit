@@ -29,12 +29,17 @@ export interface LyricsSettings {
   fontSize: number
   align: LyricsAlign
   showTimestamps: boolean
+  color: string
+  // backdrop mode: 'auto' uses CSS contrast tricks, 'solid' uses color with backdrop
+  backdropMode: 'auto' | 'solid'
 }
 
 export const DEFAULT_LYRICS_SETTINGS: LyricsSettings = {
   fontSize: 18,
   align: 'center',
-  showTimestamps: true
+  showTimestamps: true,
+  color: '#ffffff',
+  backdropMode: 'auto'
 }
 
 export interface AppSettings {
