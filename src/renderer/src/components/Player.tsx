@@ -175,6 +175,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
   useEffect(() => {
     let cancelled = false;
     setLyrics(null);
+    console.log({ song });
     getLyrics(song.videoId, song.title)
       .then((data) => {
         if (!cancelled) {

@@ -56,7 +56,6 @@ import { clearThumbMemo, getThumb } from "./thumbs";
 import { maybePing } from "./telemetry";
 
 async function fetchLyrics(
-  videoId: string,
   title: string,
   artist?: string,
 ): Promise<
@@ -64,37 +63,106 @@ async function fetchLyrics(
 > {
   // Try multiple lyrics sources
   const searchQuery = artist ? `${artist} ${title}` : title;
+  console.log({ searchQuery });
+
+  // Clean YouTube title suffixes that don't match music databases
+  function cleanTitle(t: string): string {
+    return t
+      // Remove parenthetical suffixes (handle common typos like "Offical")
+      .replace(/\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi, "")
+      // Normalize " - " separators between artist and title
+      .replace(/\s*-\s*/g, " ")
+      // Remove standalone "Audio"/"Video"/"Music" words that may remain after paren removal
+      .replace(/\b(audio|video|music)\b/gi, "")
+      // Remove [brackets] and {braces}
+      .replace(/\[.*?\]/g, "")
+      .replace(/\{.*?\}/g, "")
+      // Normalize "pt.2" -> "pt 2" for better search matching
+      .replace(/\bpt\.(\d+)/gi, "pt $1")
+      // Normalize whitespace
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const cleanSearchQuery = artist ? `${artist} ${cleanTitle(title)}` : cleanTitle(title);
+  console.log({ cleanSearchQuery });
 
   // Source 1: Try LRCLIB (synced lyrics API)
-  try {
-    const response = await fetch(
-      `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`,
-    );
-    if (response.ok) {
-      const results = await response.json() as Array<
+  // Retry on 503 with exponential backoff (respects retry-after header)
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://lrclib.net/api/search?q=${encodeURIComponent(cleanSearchQuery)}`,
         {
-          syncedLyrics: string;
-          plainLyrics: string;
-          trackName: string;
-          artistName: string;
-        }
-      >;
-      if (results.length > 0) {
-        const best = results[0];
-        if (best.syncedLyrics) {
-          const lines = parseLrc(best.syncedLyrics);
-          if (lines.length > 0) {
-            return { lines, source: "lrclib", synced: true };
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Accept: "application/json",
+          },
+        },
+      );
+      console.log({ response });
+
+      if (response.ok) {
+        const results = await response.json() as Array<
+          {
+            syncedLyrics: string;
+            plainLyrics: string;
+            trackName: string;
+            artistName: string;
+          }
+        >;
+        if (results.length > 0) {
+          // Fuzzy match: find best result by comparing trackName + artistName to query
+          function scoreMatch(result: { trackName: string; artistName: string }): number {
+            const target = `${result.artistName} ${result.trackName}`.toLowerCase();
+            const query = cleanSearchQuery.toLowerCase();
+            // Simple scoring: word overlap
+            const queryWords = new Set(query.split(/\s+/).filter(w => w.length > 2));
+            const targetWords = target.split(/\s+/);
+            let matches = 0;
+            for (const w of targetWords) if (queryWords.has(w)) matches++;
+            return matches / Math.max(queryWords.size, 1);
+          }
+
+          let best = results[0];
+          let bestScore = scoreMatch(best);
+          for (const r of results.slice(1)) {
+            const s = scoreMatch(r);
+            if (s > bestScore) {
+              bestScore = s;
+              best = r;
+            }
+          }
+          console.log({ bestMatch: `${best.artistName} - ${best.trackName}`, score: bestScore });
+
+          if (bestScore > 0.3) { // threshold for reasonable match
+            if (best.syncedLyrics) {
+              const lines = parseLrc(best.syncedLyrics);
+              if (lines.length > 0) {
+                return { lines, source: "lrclib", synced: true };
+              }
+            }
+            if (best.plainLyrics) {
+              const lines = parsePlainLyrics(best.plainLyrics);
+              return { lines, source: "lrclib", synced: false };
+            }
           }
         }
-        if (best.plainLyrics) {
-          const lines = parsePlainLyrics(best.plainLyrics);
-          return { lines, source: "lrclib", synced: false };
-        }
+      } else if (response.status === 503) {
+        // Respect retry-after header, default to 1 second with exponential backoff
+        const retryAfter = response.headers.get("retry-after");
+        const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 1000;
+        console.log(`LRCLIB 503, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
       }
+    } catch (err) {
+      console.log(`LRCLIB fetch error: ${err}`);
+      if (attempt === maxRetries - 1) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
     }
-  } catch {
-    // Ignore and try next source
   }
 
   // Source 2: Try Genius (via textise dot iitty)
@@ -485,7 +553,7 @@ app.whenReady().then(async () => {
       const cached = loadLyrics(videoId);
       if (cached) return cached;
       // Otherwise fetch from online sources
-      return await fetchLyrics(videoId, title, artist);
+      return await fetchLyrics(title, artist);
     },
   );
   ipcMain.handle("lyrics:save", (_e, videoId: string, lyrics: unknown) => {
