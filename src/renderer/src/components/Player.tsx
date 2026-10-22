@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
+  LyricsAlign,
   LyricsData,
+  LyricsSettings,
   Song,
   StemId,
   StemPanMap,
@@ -11,7 +13,12 @@ import { buildStemMeta } from "../lib/stems";
 import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
-import { getLyrics, formatTime, getCurrentLine, getUpcomingLines } from "../lib/lyrics";
+import {
+  formatTime,
+  getCurrentLine,
+  getLyrics,
+  getUpcomingLines,
+} from "../lib/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
 const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
@@ -193,11 +200,17 @@ export function Player({ song, settings }: Props): React.ReactElement {
         setLyrics(e.detail);
       }
     };
-    window.addEventListener('lyrics:search-result', handleSearchResult as EventListener);
+    window.addEventListener(
+      "lyrics:search-result",
+      handleSearchResult as EventListener,
+    );
 
     return () => {
       cancelled = true;
-      window.removeEventListener('lyrics:search-result', handleSearchResult as EventListener);
+      window.removeEventListener(
+        "lyrics:search-result",
+        handleSearchResult as EventListener,
+      );
     };
   }, [song.videoId, song.title]);
 
@@ -214,7 +227,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
     if (!container) return;
 
     // Ensure any stray YouTube player (e.g., from preview) is destroyed
-    window.dispatchEvent(new CustomEvent('preview:pause'));
+    window.dispatchEvent(new CustomEvent("preview:pause"));
 
     const host = new YouTubeHost();
     hostRef.current = host;
@@ -477,29 +490,108 @@ export function Player({ song, settings }: Props): React.ReactElement {
                   )}
                   {/* Lyrics Overlay on Video */}
                   {showLyrics && lyrics && lyrics.lines.length > 0 && (
-                    <div className="absolute inset-0 flex flex-col pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                    <div
+                      className="absolute inset-0 flex flex-col pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent"
+                      style={{
+                        textAlign: settings?.lyrics?.align ?? 'center',
+                        fontSize: `${settings?.lyrics?.fontSize ?? 18}px`,
+                      }}
+                    >
                       {/* Top gradient fade */}
-                      <div className="flex-1 overflow-y-auto px-4 py-6 pointer-events-auto" style={{ scrollBehavior: "smooth" }}>
-                        <div className="min-h-full" style={{ lineHeight: "40px" }}>
+                      <div
+                        className="flex-1 overflow-y-auto px-4 py-6 pointer-events-auto"
+                        style={{ scrollBehavior: "smooth" }}
+                      >
+                        <div className="min-h-full" style={{ lineHeight: "1.5" }}>
                           {(() => {
                             const lines = lyrics.lines;
                             const current = getCurrentLine(lines, position);
-                            if (!current) return lines.slice(0, 7).map((line: { time: number; text: string }, i: number) => (
-                              <div key={i} className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200" style={{ height: 40 }}>
-                                <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(line.time)}</span>
-                                <span className="flex-1 truncate text-lg leading-none">{line.text}</span>
-                              </div>
-                            ));
+                            const showTimestamps = settings?.lyrics?.showTimestamps ?? true;
+                            const fontSize = settings?.lyrics?.fontSize ?? 18;
+                            const lineHeight = Math.round(fontSize * 1.5);
+                            if (!current) {
+                              return lines.slice(0, 7).map(
+                                (line: { time: number; text: string }, i: number) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200"
+                                    style={{ height: lineHeight }}
+                                  >
+                                    {showTimestamps && (
+                                      <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">
+                                        {formatTime(line.time)}
+                                      </span>
+                                    )}
+                                    <span className="flex-1 truncate leading-none font-medium">
+                                      {line.text}
+                                    </span>
+                                  </div>
+                                ));
+                            }
                             const pastStart = Math.max(0, current.index - 3);
                             const result: React.ReactNode[] = [];
                             for (let i = pastStart; i < current.index; i++) {
-                              result.push(<div key={i} className="flex items-center gap-3 px-2 text-white/40 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(lines[i].time)}</span><span className="flex-1 truncate text-lg leading-none">{lines[i].text}</span></div>);
+                              result.push(
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-3 px-2 text-white/40 transition-colors duration-200"
+                                  style={{ height: lineHeight }}
+                                >
+                                  {showTimestamps && (
+                                    <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">
+                                      {formatTime(lines[i].time)}
+                                    </span>
+                                  )}
+                                  <span className="flex-1 truncate leading-none font-medium">
+                                    {lines[i].text}
+                                  </span>
+                                </div>,
+                              );
                             }
-                            result.push(<div key={current.index} className="flex items-center gap-3 px-2 text-white font-medium scale-105 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(current.line.time)}</span><span className="flex-1 truncate text-lg leading-none">{current.line.text}</span></div>);
-                            const upcoming = getUpcomingLines(lines, position, 3);
-                            upcoming.forEach((line: { time: number; text: string }, i: number) => {
-                              result.push(<div key={current.index + 1 + i} className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(line.time)}</span><span className="flex-1 truncate text-lg leading-none">{line.text}</span></div>);
-                            });
+                            result.push(
+                              <div
+                                key={current.index}
+                                className="flex items-center gap-3 px-2 text-white font-extrabold scale-105 transition-colors duration-200"
+                                style={{ height: lineHeight }}
+                              >
+                                {showTimestamps && (
+                                  <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">
+                                    {formatTime(current.line.time)}
+                                  </span>
+                                )}
+                                <span className="flex-1 truncate leading-none font-medium">
+                                  {current.line.text}
+                                </span>
+                              </div>,
+                            );
+                            const upcoming = getUpcomingLines(
+                              lines,
+                              position,
+                              3,
+                            );
+                            upcoming.forEach(
+                              (
+                                line: { time: number; text: string },
+                                i: number,
+                              ) => {
+                                result.push(
+                                  <div
+                                    key={current.index + 1 + i}
+                                    className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200"
+                                    style={{ height: lineHeight }}
+                                  >
+                                    {showTimestamps && (
+                                      <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">
+                                        {formatTime(line.time)}
+                                      </span>
+                                    )}
+                                    <span className="flex-1 truncate leading-none font-medium">
+                                      {line.text}
+                                    </span>
+                                  </div>,
+                                );
+                              },
+                            );
                             return result;
                           })()}
                         </div>

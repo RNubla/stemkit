@@ -23,6 +23,20 @@ export interface Song {
   source?: 'local'
 }
 
+export type LyricsAlign = 'left' | 'center' | 'right'
+
+export interface LyricsSettings {
+  fontSize: number
+  align: LyricsAlign
+  showTimestamps: boolean
+}
+
+export const DEFAULT_LYRICS_SETTINGS: LyricsSettings = {
+  fontSize: 18,
+  align: 'center',
+  showTimestamps: true
+}
+
 export interface AppSettings {
   shifts: 1 | 2
   htdemucsFt: boolean
@@ -39,6 +53,8 @@ export interface AppSettings {
   // aac (.m4a) is transcoded on export via the bundled ffmpeg. mp3 isn't an
   // option — the bundled ffmpeg is a minimal static build without libmp3lame
   exportFormat: 'wav' | 'aac'
+  // lyrics display settings
+  lyrics: LyricsSettings
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -47,7 +63,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   roformerVocals: false,
   gpuSplit: false,
   hideVideo: false,
-  exportFormat: 'wav'
+  exportFormat: 'wav',
+  lyrics: DEFAULT_LYRICS_SETTINGS
 }
 
 export interface EngineStatus {

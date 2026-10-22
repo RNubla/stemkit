@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings, EngineStatus, GpuVendor } from '../../../shared/types'
+import type { AppSettings, EngineStatus, GpuVendor, LyricsSettings } from '../../../shared/types'
+import { DEFAULT_LYRICS_SETTINGS } from '../../../shared/types'
 import { XIcon } from './Icons'
 
 interface Props {
@@ -109,6 +110,7 @@ function SectionHeader({ label }: { label: string }): React.ReactElement {
 }
 
 export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props): React.ReactElement {
+  const lyricsSettings = settings.lyrics ?? DEFAULT_LYRICS_SETTINGS;
   const [engines, setEngines] = useState<EngineStatus | null>(null)
   const [vocalsPct, setVocalsPct] = useState<number | null>(null)
   const [ftPct, setFtPct] = useState<number | null>(null)
@@ -380,6 +382,78 @@ export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props)
                     {opt.label}
                   </button>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="pt-5 border-t border-white/[0.06] space-y-5">
+            <SectionHeader label="Lyrics" />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">Font size</p>
+                  <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                    Adjust lyrics text size on the video overlay
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => onChange({ lyrics: { ...lyricsSettings, fontSize: Math.max(12, lyricsSettings.fontSize - 2) } })}
+                    className="no-drag w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                    aria-label="Decrease font size"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                    </svg>
+                  </button>
+                  <span className="w-12 text-center text-white font-mono tabular-nums">{lyricsSettings.fontSize}px</span>
+                  <button
+                    onClick={() => onChange({ lyrics: { ...lyricsSettings, fontSize: Math.min(32, lyricsSettings.fontSize + 2) } })}
+                    className="no-drag w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                    aria-label="Increase font size"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">Alignment</p>
+                  <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                    Horizontal alignment of lyrics on the video
+                  </p>
+                </div>
+                <div className="flex shrink-0 rounded-lg bg-white/[0.06] p-0.5 border border-white/[0.08]">
+                  {(['left', 'center', 'right'] as const).map((align) => (
+                    <button
+                      key={align}
+                      onClick={() => onChange({ lyrics: { ...lyricsSettings, align } })}
+                      className={`no-drag px-3 h-6 rounded-md text-[12px] font-semibold transition-colors ${
+                        lyricsSettings.align === align
+                          ? 'bg-white text-black'
+                          : 'text-white/45 hover:text-white/80'
+                      }`}
+                    >
+                      {align.charAt(0).toUpperCase() + align.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">Show timestamps</p>
+                  <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                    Display time codes next to each lyric line
+                  </p>
+                </div>
+                <Toggle
+                  on={lyricsSettings.showTimestamps}
+                  onClick={() => onChange({ lyrics: { ...lyricsSettings, showTimestamps: !lyricsSettings.showTimestamps } })}
+                />
               </div>
             </div>
           </section>
