@@ -14,10 +14,13 @@ import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
 import {
+  applyOffset,
   formatTime,
   getCurrentLine,
   getLyrics,
+  getLyricsOffset,
   getUpcomingLines,
+  saveLyrics,
 } from "../lib/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
@@ -80,6 +83,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [preset, setPreset] = useState<PresetId | "custom">("all");
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
+  const [originalLyrics, setOriginalLyrics] = useState<LyricsData | null>(null);
+  const [lyricsOffset, setLyricsOffset] = useState(0);
 
   const stemMeta = useMemo(
     () => buildStemMeta(Object.keys(buffers) as StemId[]),
@@ -181,11 +186,21 @@ export function Player({ song, settings }: Props): React.ReactElement {
   useEffect(() => {
     let cancelled = false;
     setLyrics(null);
+    setOriginalLyrics(null);
+    setLyricsOffset(0);
     console.log({ song });
     getLyrics(song.videoId, song.title)
       .then((data) => {
         if (!cancelled) {
-          setLyrics(data);
+          // Store original lyrics so offset can be applied cleanly
+          setOriginalLyrics(data);
+          const savedOffset = getLyricsOffset(data);
+          setLyricsOffset(savedOffset);
+          if (savedOffset !== 0) {
+            setLyrics(applyOffset(data, savedOffset));
+          } else {
+            setLyrics(data);
+          }
         }
       })
       .catch(() => {
@@ -197,7 +212,14 @@ export function Player({ song, settings }: Props): React.ReactElement {
     // Listen for manual search results
     const handleSearchResult = (e: CustomEvent<LyricsData>) => {
       if (!cancelled) {
-        setLyrics(e.detail);
+        setOriginalLyrics(e.detail);
+        const savedOffset = getLyricsOffset(e.detail);
+        setLyricsOffset(savedOffset);
+        if (savedOffset !== 0) {
+          setLyrics(applyOffset(e.detail, savedOffset));
+        } else {
+          setLyrics(e.detail);
+        }
       }
     };
     window.addEventListener(
@@ -785,6 +807,63 @@ export function Player({ song, settings }: Props): React.ReactElement {
               Lyrics
             </button>
           </div>
+
+          {showLyrics && lyrics && lyrics.lines.length > 0 && (
+            <div className="mt-2 flex items-center gap-2 p-2 glass rounded-xl">
+              <span className="text-xs text-white/50">Offset:</span>
+              <button
+                onClick={() => {
+                  const next = Math.round((lyricsOffset - 0.5) * 10) / 10;
+                  setLyricsOffset(next);
+                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, next));
+                }}
+                className="no-drag w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                aria-label="Decrease offset"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                </svg>
+              </button>
+              <span className="w-14 text-center text-white font-mono tabular-nums text-sm">
+                {lyricsOffset >= 0 ? '+' : ''}{lyricsOffset.toFixed(1)}s
+              </span>
+              <button
+                onClick={() => {
+                  const next = Math.round((lyricsOffset + 0.5) * 10) / 10;
+                  setLyricsOffset(next);
+                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, next));
+                }}
+                className="no-drag w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                aria-label="Increase offset"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setLyricsOffset(0);
+                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, 0));
+                  void saveLyrics(song.videoId, applyOffset(originalLyrics ?? lyrics!, 0));
+                }}
+                className="no-drag ml-2 px-2 py-1 text-[11px] text-white/50 hover:text-white transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => {
+                  if (!originalLyrics) return;
+                  const saved = applyOffset(originalLyrics, lyricsOffset);
+                  saved.offset = lyricsOffset;
+                  void saveLyrics(song.videoId, saved);
+                }}
+                className="no-drag ml-2 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-[11px] text-white transition-colors"
+                title="Save offset"
+              >
+                Save
+              </button>
+            </div>
+          )}
 
           <Transport
             playing={playing}

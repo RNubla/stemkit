@@ -141,6 +141,7 @@ export interface LyricsData {
   lines: LyricsLine[]
   source: string
   synced: boolean
+  offset?: number  // manual sync offset in seconds
 }
 
 export interface UpdateEvent {
