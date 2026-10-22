@@ -187,8 +187,18 @@ export function Player({ song, settings }: Props): React.ReactElement {
           setLyrics({ lines: [], source: "none", synced: false });
         }
       });
+
+    // Listen for manual search results
+    const handleSearchResult = (e: CustomEvent<LyricsData>) => {
+      if (!cancelled) {
+        setLyrics(e.detail);
+      }
+    };
+    window.addEventListener('lyrics:search-result', handleSearchResult as EventListener);
+
     return () => {
       cancelled = true;
+      window.removeEventListener('lyrics:search-result', handleSearchResult as EventListener);
     };
   }, [song.videoId, song.title]);
 
@@ -203,6 +213,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
     let disposed = false;
     const container = containerRef.current;
     if (!container) return;
+
+    // Ensure any stray YouTube player (e.g., from preview) is destroyed
+    window.dispatchEvent(new CustomEvent('preview:pause'));
 
     const host = new YouTubeHost();
     hostRef.current = host;
@@ -220,9 +233,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
         if (!disposed) setYtReady(true);
       });
 
-    return () => {
-      disposed = true;
-    };
     return () => {
       disposed = true;
     };
@@ -560,6 +570,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 currentTime={position}
                 duration={duration}
                 className="h-96"
+                videoId={song.videoId}
+                title={song.title}
               />
             </div>
           )}

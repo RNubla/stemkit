@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { formatTime, getCurrentLine, getUpcomingLines } from "../lib/lyrics";
+import { useMemo, useState } from "react";
+import { formatTime, getCurrentLine, getUpcomingLines, searchLyrics } from "../lib/lyrics";
 import type { LyricsData, LyricsLine } from "../../../shared/types";
 
 interface Props {
@@ -7,29 +7,38 @@ interface Props {
   currentTime: number;
   duration: number;
   className?: string;
+  // For manual search when lyrics not found
+  videoId?: string;
+  title?: string;
 }
 
 const LINE_HEIGHT = 40; // px per line
 const VISIBLE_LINES = 7; // current + 3 before + 3 after
 
 export function LyricsDisplay(
-  { lyrics, currentTime, duration, className = "" }: Props,
+  { lyrics, currentTime, duration, className = "", videoId, title }: Props,
 ) {
-  if (!lyrics || !lyrics.lines.length) {
-    return (
-      <div
-        className={`flex-1 flex items-center justify-center text-white/30 ${className}`}
-      >
-        {lyrics?.source === "none"
-          ? <p className="text-center px-4">No lyrics found for this track</p>
-          : lyrics?.source
-          ? <p className="text-center px-4">No lyrics available</p>
-          : <p className="text-center px-4 animate-pulse">Loading lyrics…</p>}
-      </div>
-    );
-  }
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
-  const lines = lyrics.lines;
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim() || isSearching) return;
+    setIsSearching(true);
+    try {
+      const result = await searchLyrics(searchQuery.trim());
+      // The parent component will handle updating lyrics state
+      // We dispatch a custom event to notify the parent
+      window.dispatchEvent(new CustomEvent('lyrics:search-result', { detail: result }));
+    } catch (err) {
+      console.error('Lyrics search failed:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Always compute these, even if lyrics are empty (will be no-ops)
+  const lines = lyrics?.lines ?? [];
   const current = useMemo(() => getCurrentLine(lines, currentTime), [
     lines,
     currentTime,
@@ -93,6 +102,44 @@ export function LyricsDisplay(
     if (currentLineIndex === -1) return 0;
     return Math.max(0, (currentLineIndex - 3) * LINE_HEIGHT);
   }, [current, visibleLines]);
+
+  if (!lyrics || !lyrics.lines.length) {
+    return (
+      <div className={`flex-1 flex flex-col ${className}`}>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-center px-4 text-white/30">
+            {lyrics?.source === "none"
+              ? "No lyrics found for this track"
+              : lyrics?.source
+              ? "No lyrics available"
+              : <span className="animate-pulse">Loading lyrics…</span>}
+          </p>
+        </div>
+        <div className="p-4 border-t border-white/5">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search lyrics manually (e.g. 'Artist - Song')"
+              className="flex-1 glass rounded-xl px-4 py-2 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              disabled={isSearching}
+            />
+            <button
+              type="submit"
+              disabled={!searchQuery.trim() || isSearching}
+              className="glass rounded-xl px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isSearching ? "Searching…" : "Search"}
+            </button>
+          </form>
+          <p className="mt-2 text-xs text-white/30 text-center">
+            Try the exact artist and song title as it appears on music databases
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex-1 flex flex-col overflow-hidden ${className}`}>

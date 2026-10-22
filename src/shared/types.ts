@@ -161,4 +161,5 @@ export interface StemKitApi {
   // Lyrics
   getLyrics(videoId: string, title: string, artist?: string): Promise<LyricsData>
   saveLyrics(videoId: string, lyrics: LyricsData): Promise<void>
+  searchLyrics(query: string): Promise<LyricsData>
 }

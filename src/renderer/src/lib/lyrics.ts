@@ -48,10 +48,13 @@ export function getLyrics(videoId: string, title: string, artist?: string): Prom
   entry = window.stemkit
     .getLyrics(videoId, title, artist)
     .then((data) => {
-      // Persist successful result
-      const cache = loadPersistedCache()
-      cache.set(videoId, data)
-      persistCache(cache)
+      // Only persist if lyrics were actually found (lines.length > 0)
+      // This allows retrying on subsequent clicks if lyrics weren't found before
+      if (data.lines.length > 0) {
+        const cache = loadPersistedCache()
+        cache.set(videoId, data)
+        persistCache(cache)
+      }
       return data
     })
     .catch((err) => {
@@ -65,6 +68,10 @@ export function getLyrics(videoId: string, title: string, artist?: string): Prom
 
 export function saveLyrics(videoId: string, lyrics: LyricsData): Promise<void> {
   return window.stemkit.saveLyrics(videoId, lyrics)
+}
+
+export function searchLyrics(query: string): Promise<LyricsData> {
+  return window.stemkit.searchLyrics(query)
 }
 
 export function clearLyricsCache(videoId: string): void {

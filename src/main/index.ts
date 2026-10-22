@@ -76,7 +76,7 @@ async function fetchLyrics(
       // Normalize " - " separators between artist and title
       .replace(/\s*-\s*/g, " ")
       // Remove standalone "Audio"/"Video"/"Music" words that may remain after paren removal
-      .replace(/\b(audio|video|music)\b/gi, "")
+      .replace(/\b(audio|video|music|lyric)\b/gi, "")
       // Remove [brackets] and {braces}
       .replace(/\[.*?\]/g, "")
       .replace(/\{.*?\}/g, "")
@@ -577,6 +577,13 @@ app.whenReady().then(async () => {
       if (cached) return cached;
       // Otherwise fetch from online sources
       return await fetchLyrics(title, artist);
+    },
+  );
+  ipcMain.handle(
+    "lyrics:search",
+    async (_e, query: string) => {
+      // Manual search with custom query
+      return await fetchLyrics(query);
     },
   );
   ipcMain.handle("lyrics:save", (_e, videoId: string, lyrics: unknown) => {

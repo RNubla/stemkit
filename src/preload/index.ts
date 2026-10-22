@@ -42,7 +42,8 @@ const api: StemKitApi = {
   onSettingsChange: (cb) => subscribe<AppSettings>('settings:changed', cb),
   // Lyrics
   getLyrics: (videoId, title, artist) => ipcRenderer.invoke('lyrics:get', videoId, title, artist),
-  saveLyrics: (videoId, lyrics) => ipcRenderer.invoke('lyrics:save', videoId, lyrics)
+  saveLyrics: (videoId, lyrics) => ipcRenderer.invoke('lyrics:save', videoId, lyrics),
+  searchLyrics: (query) => ipcRenderer.invoke('lyrics:search', query)
 }
 
 contextBridge.exposeInMainWorld('stemkit', api)
