@@ -66,6 +66,7 @@ export class YouTubeHost {
     container: HTMLElement,
     videoId: string,
     onState: (s: YTState) => void,
+    options?: { nativeControls?: boolean },
   ): Promise<void> {
     this.stateCb = onState;
     await loadYTApi();
@@ -77,15 +78,15 @@ export class YouTubeHost {
         width: "100%",
         height: "100%",
         playerVars: {
-          controls: 0,
-          disablekb: 1,
+          controls: options?.nativeControls ? 1 : 0,
+          disablekb: options?.nativeControls ? 0 : 1,
           rel: 0,
           playsinline: 1,
           origin: window.location.origin,
         },
         events: {
           onReady: () => {
-            p.mute();
+            if (!options?.nativeControls) p.mute();
             resolve(p);
           },
           onStateChange: (e: { data: number }) =>

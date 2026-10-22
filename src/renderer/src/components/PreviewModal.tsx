@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SearchResult } from "../../../shared/types";
-import { loadYTApi, YouTubeHost, type YTState } from "../lib/youtube";
-import { XIcon, PlayIcon, PauseIcon } from "./Icons";
+import { loadYTApi, YouTubeHost } from "../lib/youtube";
+import { XIcon } from "./Icons";
 
 interface Props {
   result: SearchResult;
@@ -13,18 +13,12 @@ interface Props {
 export function PreviewModal({ result, isOpen, onClose, onSplit }: Props): React.ReactElement | null {
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<YouTubeHost | null>(null);
-  const [state, setState] = useState<YTState>("unstarted");
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !result) {
       hostRef.current?.destroy();
       hostRef.current = null;
-      setState("unstarted");
-      setDuration(0);
-      setCurrentTime(0);
       setError(null);
       return;
     }
@@ -39,16 +33,7 @@ export function PreviewModal({ result, isOpen, onClose, onSplit }: Props): React
     loadYTApi()
       .then(() => {
         if (disposed) return;
-        return host.mount(container, result.videoId, (s) => {
-          if (!disposed) setState(s);
-        });
-      })
-      .then(() => {
-        if (!disposed) {
-          // Get duration after player is ready
-          const dur = host.duration();
-          if (dur > 0) setDuration(dur);
-        }
+        return host.mount(container, result.videoId, () => {}, { nativeControls: true });
       })
       .catch((err) => {
         if (!disposed) {
@@ -71,38 +56,7 @@ export function PreviewModal({ result, isOpen, onClose, onSplit }: Props): React
     };
   }, [isOpen, result?.videoId]);
 
-  // Poll for duration and current time after player is ready
-  useEffect(() => {
-    if (!isOpen || state === "unstarted") return;
-    let interval: ReturnType<typeof setInterval>;
-    interval = setInterval(() => {
-      const host = hostRef.current;
-      if (!host) return;
-      const d = host.duration() ?? 0;
-      if (d > 0 && duration === 0) {
-        setDuration(d);
-      }
-      const t = host.time() ?? 0;
-      setCurrentTime(t);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isOpen, state, duration]);
-
-  const togglePlay = () => {
-    if (state === "playing") {
-      hostRef.current?.pause();
-    } else {
-      hostRef.current?.play();
-    }
-  };
-
   if (!isOpen) return null;
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
@@ -136,34 +90,6 @@ export function PreviewModal({ result, isOpen, onClose, onSplit }: Props): React
               <p className="text-center text-rose-300 text-sm">Failed to load preview: {error}</p>
             </div>
           )}
-        </div>
-
-        {/* Controls */}
-        <div className="px-4 py-3 border-t border-white/10">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={togglePlay}
-              disabled={state === "unstarted" || state === "buffering"}
-              className="no-drag flex items-center gap-2 glass rounded-xl px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {state === "playing" ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
-              <span className="text-sm font-medium capitalize">{state === "playing" ? "Pause" : state === "buffering" ? "Buffering…" : "Play"}</span>
-            </button>
-            <div className="flex-1 flex items-center gap-2 text-xs text-white/45">
-              <span className="font-mono tabular-nums">
-                {formatTime(currentTime)}
-              </span>
-              <div className="flex-1 h-1.5 bg-white/10 rounded-full relative" style={{ height: 4 }}>
-                <div
-                  className="h-full bg-violet-500 rounded-full transition-all duration-100"
-                  style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
-                />
-              </div>
-              <span className="font-mono tabular-nums">
-                {formatTime(duration)}
-              </span>
-            </div>
-          </div>
         </div>
 
         {/* Footer Actions */}
