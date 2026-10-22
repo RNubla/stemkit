@@ -69,7 +69,10 @@ async function fetchLyrics(
   function cleanTitle(t: string): string {
     return t
       // Remove parenthetical suffixes (handle common typos like "Offical")
-      .replace(/\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi, "")
+      .replace(
+        /\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi,
+        "",
+      )
       // Normalize " - " separators between artist and title
       .replace(/\s*-\s*/g, " ")
       // Remove standalone "Audio"/"Video"/"Music" words that may remain after paren removal
@@ -84,7 +87,9 @@ async function fetchLyrics(
       .trim();
   }
 
-  const cleanSearchQuery = artist ? `${artist} ${cleanTitle(title)}` : cleanTitle(title);
+  const cleanSearchQuery = artist
+    ? `${artist} ${cleanTitle(title)}`
+    : cleanTitle(title);
   console.log({ cleanSearchQuery });
 
   // Source 1: Try LRCLIB (synced lyrics API)
@@ -93,7 +98,9 @@ async function fetchLyrics(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await fetch(
-        `https://lrclib.net/api/search?q=${encodeURIComponent(cleanSearchQuery)}`,
+        `https://lrclib.net/api/search?q=${
+          encodeURIComponent(cleanSearchQuery)
+        }`,
         {
           headers: {
             "User-Agent":
@@ -115,11 +122,16 @@ async function fetchLyrics(
         >;
         if (results.length > 0) {
           // Fuzzy match: find best result by comparing trackName + artistName to query
-          function scoreMatch(result: { trackName: string; artistName: string }): number {
-            const target = `${result.artistName} ${result.trackName}`.toLowerCase();
+          function scoreMatch(
+            result: { trackName: string; artistName: string },
+          ): number {
+            const target = `${result.artistName} ${result.trackName}`
+              .toLowerCase();
             const query = cleanSearchQuery.toLowerCase();
             // Simple scoring: word overlap
-            const queryWords = new Set(query.split(/\s+/).filter(w => w.length > 2));
+            const queryWords = new Set(
+              query.split(/\s+/).filter((w) => w.length > 2),
+            );
             const targetWords = target.split(/\s+/);
             let matches = 0;
             for (const w of targetWords) if (queryWords.has(w)) matches++;
@@ -135,7 +147,10 @@ async function fetchLyrics(
               best = r;
             }
           }
-          console.log({ bestMatch: `${best.artistName} - ${best.trackName}`, score: bestScore });
+          console.log({
+            bestMatch: `${best.artistName} - ${best.trackName}`,
+            score: bestScore,
+          });
 
           if (bestScore > 0.3) { // threshold for reasonable match
             if (best.syncedLyrics) {
@@ -153,15 +168,23 @@ async function fetchLyrics(
       } else if (response.status === 503) {
         // Respect retry-after header, default to 1 second with exponential backoff
         const retryAfter = response.headers.get("retry-after");
-        const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 1000;
-        console.log(`LRCLIB 503, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        const delay = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.pow(2, attempt) * 1000;
+        console.log(
+          `LRCLIB 503, retrying in ${delay}ms (attempt ${
+            attempt + 1
+          }/${maxRetries})`,
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
     } catch (err) {
       console.log(`LRCLIB fetch error: ${err}`);
       if (attempt === maxRetries - 1) break;
-      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.pow(2, attempt) * 1000)
+      );
     }
   }
 
