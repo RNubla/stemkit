@@ -11,8 +11,7 @@ import { buildStemMeta } from "../lib/stems";
 import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
-import { LyricsDisplay } from "./LyricsDisplay";
-import { getLyrics } from "../lib/lyrics";
+import { getLyrics, formatTime, getCurrentLine, getUpcomingLines } from "../lib/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
 const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
@@ -476,6 +475,39 @@ export function Player({ song, settings }: Props): React.ReactElement {
                       </div>
                     </div>
                   )}
+                  {/* Lyrics Overlay on Video */}
+                  {showLyrics && lyrics && lyrics.lines.length > 0 && (
+                    <div className="absolute inset-0 flex flex-col pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                      {/* Top gradient fade */}
+                      <div className="flex-1 overflow-y-auto px-4 py-6 pointer-events-auto" style={{ scrollBehavior: "smooth" }}>
+                        <div className="min-h-full" style={{ lineHeight: "40px" }}>
+                          {(() => {
+                            const lines = lyrics.lines;
+                            const current = getCurrentLine(lines, position);
+                            if (!current) return lines.slice(0, 7).map((line: { time: number; text: string }, i: number) => (
+                              <div key={i} className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200" style={{ height: 40 }}>
+                                <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(line.time)}</span>
+                                <span className="flex-1 truncate text-lg leading-none">{line.text}</span>
+                              </div>
+                            ));
+                            const pastStart = Math.max(0, current.index - 3);
+                            const result: React.ReactNode[] = [];
+                            for (let i = pastStart; i < current.index; i++) {
+                              result.push(<div key={i} className="flex items-center gap-3 px-2 text-white/40 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(lines[i].time)}</span><span className="flex-1 truncate text-lg leading-none">{lines[i].text}</span></div>);
+                            }
+                            result.push(<div key={current.index} className="flex items-center gap-3 px-2 text-white font-medium scale-105 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(current.line.time)}</span><span className="flex-1 truncate text-lg leading-none">{current.line.text}</span></div>);
+                            const upcoming = getUpcomingLines(lines, position, 3);
+                            upcoming.forEach((line: { time: number; text: string }, i: number) => {
+                              result.push(<div key={current.index + 1 + i} className="flex items-center gap-3 px-2 text-white/60 transition-colors duration-200" style={{ height: 40 }}><span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">{formatTime(line.time)}</span><span className="flex-1 truncate text-lg leading-none">{line.text}</span></div>);
+                            });
+                            return result;
+                          })()}
+                        </div>
+                      </div>
+                      {/* Bottom gradient fade */}
+                      <div className="h-20 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -562,19 +594,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
               Lyrics
             </button>
           </div>
-
-          {showLyrics && (
-            <div className="mt-4 glass rounded-2xl overflow-hidden">
-              <LyricsDisplay
-                lyrics={lyrics}
-                currentTime={position}
-                duration={duration}
-                className="h-96"
-                videoId={song.videoId}
-                title={song.title}
-              />
-            </div>
-          )}
 
           <Transport
             playing={playing}
