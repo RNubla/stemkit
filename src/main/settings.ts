@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { userDataDir } from './env'
-import { DEFAULT_SETTINGS, type AppSettings } from '../shared/types'
+import { DEFAULT_SETTINGS, DEFAULT_LYRICS_SETTINGS, type AppSettings } from '../shared/types'
 
 function settingsFile(): string {
   return join(userDataDir(), 'settings.json')
@@ -25,7 +25,12 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
     roformerVocals: !!merged.roformerVocals,
     gpuSplit: !!merged.gpuSplit,
     hideVideo: !!merged.hideVideo,
-    exportFormat: merged.exportFormat === 'aac' ? 'aac' : 'wav'
+    exportFormat: merged.exportFormat === 'aac' ? 'aac' : 'wav',
+    lyrics: {
+      fontSize: typeof merged.lyrics?.fontSize === 'number' ? merged.lyrics.fontSize : DEFAULT_LYRICS_SETTINGS.fontSize,
+      align: merged.lyrics?.align ?? DEFAULT_LYRICS_SETTINGS.align,
+      showTimestamps: merged.lyrics?.showTimestamps ?? DEFAULT_LYRICS_SETTINGS.showTimestamps,
+    },
   }
   writeFileSync(settingsFile(), JSON.stringify(next, null, 2))
   for (const win of BrowserWindow.getAllWindows()) {
