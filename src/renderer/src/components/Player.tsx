@@ -397,8 +397,13 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const applyPreset = (p: PresetId): void => {
     setPreset(p);
     setMutes(new Set());
-    if (p === "all") setSolos(new Set());
-    else if (p === "karaoke") {
+    if (p === "all" || p === "karaoke-low") {
+      setSolos(new Set());
+      if (p === "karaoke-low") {
+        // Set vocals to 40% while keeping other stems at 100%
+        setVols((prev) => ({ ...prev, vocals: 0.2 }));
+      }
+    } else if (p === "karaoke") {
       setSolos(
         new Set<StemId>(
           stemMeta.filter((s) => s.id !== "vocals").map((s) => s.id),
@@ -931,38 +936,38 @@ export function Player({ song, settings }: Props): React.ReactElement {
             </p>
           )}
           {
-            /* <div className="mt-4 space-y-2">
-            {decoding
-              ? [...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="glass rounded-xl h-16 animate-pulse"
-                  style={{ animationDelay: `${i * 120}ms` }}
-                />
-              ))
-              : stemMeta.map((meta) => (
-                <StemLane
-                  key={meta.id}
-                  meta={meta}
-                  buffer={buffers[meta.id] ?? null}
-                  duration={duration}
-                  getPosition={getPosition}
-                  audible={!mutes.has(meta.id) &&
-                    (solos.size === 0 || solos.has(meta.id))}
-                  volume={vols[meta.id] ?? 1}
-                  pan={pans[meta.id] ?? 0}
-                  onPan={(value) => changePan(meta.id, value)}
-                  muted={mutes.has(meta.id)}
-                  soloed={solos.has(meta.id)}
-                  onToggleMute={() => toggleMute(meta.id)}
-                  onToggleSolo={() => toggleSolo(meta.id)}
-                  onVolume={(v) =>
-                    setVols((prev) => ({ ...prev, [meta.id]: v }))}
-                  onSeek={seekTo}
-                  onExport={() => exportStem(meta.id)}
-                />
-              ))}
-          </div> */
+            <div className="mt-4 space-y-2">
+              {decoding
+                ? [...Array(4)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="glass rounded-xl h-16 animate-pulse"
+                    style={{ animationDelay: `${i * 120}ms` }}
+                  />
+                ))
+                : stemMeta.map((meta) => (
+                  <StemLane
+                    key={meta.id}
+                    meta={meta}
+                    buffer={buffers[meta.id] ?? null}
+                    duration={duration}
+                    getPosition={getPosition}
+                    audible={!mutes.has(meta.id) &&
+                      (solos.size === 0 || solos.has(meta.id))}
+                    volume={vols[meta.id] ?? 1}
+                    pan={pans[meta.id] ?? 0}
+                    onPan={(value) => changePan(meta.id, value)}
+                    muted={mutes.has(meta.id)}
+                    soloed={solos.has(meta.id)}
+                    onToggleMute={() => toggleMute(meta.id)}
+                    onToggleSolo={() => toggleSolo(meta.id)}
+                    onVolume={(v) =>
+                      setVols((prev) => ({ ...prev, [meta.id]: v }))}
+                    onSeek={seekTo}
+                    onExport={() => exportStem(meta.id)}
+                  />
+                ))}
+            </div>
           }
         </div>
       </div>
