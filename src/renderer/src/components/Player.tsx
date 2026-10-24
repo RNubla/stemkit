@@ -81,10 +81,12 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [mutes, setMutes] = useState<Set<StemId>>(new Set());
   const [solos, setSolos] = useState<Set<StemId>>(new Set());
   const [master, setMaster] = useState(0.9);
-  const [preset, setPreset] = useState<PresetId | "custom">("all");
+  const [preset, setPreset] = useState<PresetId | "custom">("karaoke");
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
-  const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricsSearchResult[]>([]);
+  const [lyricsSearchResults, setLyricsSearchResults] = useState<
+    LyricsSearchResult[]
+  >([]);
   const [showLyricsSearch, setShowLyricsSearch] = useState(false);
   const [isSearchingLyrics, setIsSearchingLyrics] = useState(false);
 
@@ -103,6 +105,12 @@ export function Player({ song, settings }: Props): React.ReactElement {
   // streaming it from YouTube (and switches thumbnails to the local cache)
   const showVideo = !(settings?.hideVideo ?? false) && !isLocal;
 
+  // Default to karaoke on every song load. Re-applies once stemMeta is
+  // populated (buffers loaded) so solos are set against the actual stems.
+  useEffect(() => {
+    applyPreset("karaoke");
+  }, [song.title, stemMeta]);
+
   useEffect(() => {
     const generation = ++panGeneration.current;
     setPans({});
@@ -119,7 +127,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
     setVols({});
     setMutes(new Set());
     setSolos(new Set());
-    setPreset("all");
+    setPreset("karaoke");
     engine.stopAll();
 
     let cancelled = false;
@@ -818,57 +826,87 @@ export function Player({ song, settings }: Props): React.ReactElement {
               </button>
 
               {showLyricsSearch && isSearchingLyrics && (
-                <span className="text-xs text-amber-400/90 animate-pulse">Loading…</span>
+                <span className="text-xs text-amber-400/90 animate-pulse">
+                  Loading…
+                </span>
               )}
 
               {showLyricsSearch && !isSearchingLyrics && (
                 <>
-                  {lyricsSearchResults.length === 0 ? (
-                    <span className="text-xs text-white/50 italic">No lyrics found</span>
-                  ) : (
-                    <select
-                      className="glass rounded-lg text-xs text-white py-1 px-2 border border-white/10 focus:border-violet-500/50 outline-none"
-                      defaultValue=""
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (!value) return;
-                        const result = lyricsSearchResults.find((r) => r.trackName === value);
-                        if (!result) return;
-                        const hasSynced = Boolean(result.hasSynced && result.syncedLyrics);
-                        const text = hasSynced ? result.syncedLyrics! : result.plainLyrics;
-                        if (!text) return;
-                        const lines: LyricsLine[] = text.split("\n").filter(Boolean).map((line) => {
-                          const m = line.match(/^\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/);
-                          if (m) {
-                            const minutes = parseInt(m[1], 10);
-                            const seconds = parseInt(m[2], 10);
-                            const ms = m[3] ? parseInt(m[3], 10) : 0;
-                            const time = minutes * 60 + seconds + ms / 1000;
-                            return { time, text: m[4] };
+                  {lyricsSearchResults.length === 0
+                    ? (
+                      <span className="text-xs text-white/50 italic">
+                        No lyrics found
+                      </span>
+                    )
+                    : (
+                      <select
+                        className="glass rounded-lg text-xs text-white py-1 px-2 border border-white/10 focus:border-violet-500/50 outline-none"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (!value) return;
+                          const result = lyricsSearchResults.find((r) =>
+                            r.trackName === value
+                          );
+                          if (!result) {
+                            return;
                           }
-                          return { time: 0, text: line };
-                        }).sort((a, b) => a.time - b.time);
-                        const selected: LyricsData = {
-                          lines,
-                          source: "lrclib",
-                          synced: hasSynced,
-                        };
-                        console.log("Saving lyrics:", selected);
-                        setLyrics(selected);
-                        void saveLyrics(song.videoId, selected);
-                        setShowLyricsSearch(false);
-                      }}
-                    >
-                      <option value="">Select a lyric</option>
-                      {lyricsSearchResults.map((r) => (
-                        <option key={`${r.trackName}|${r.artistName}`} value={r.trackName}>
-                          {r.trackName} — {r.artistName}{r.duration ? ` (${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, "0")})` : ""}
-                          {r.hasSynced ? " · synced" : " · plain"}
-                          {r.instrumental ? " · instrumental" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                          const hasSynced = Boolean(
+                            result.hasSynced && result.syncedLyrics,
+                          );
+                          const text = hasSynced
+                            ? result.syncedLyrics!
+                            : result.plainLyrics;
+                          if (!text) {
+                            return;
+                          }
+                          const lines: LyricsLine[] = text.split("\n").filter(
+                            Boolean,
+                          ).map((line) => {
+                            const m = line.match(
+                              /^\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/,
+                            );
+                            if (m) {
+                              const minutes = parseInt(m[1], 10);
+                              const seconds = parseInt(m[2], 10);
+                              const ms = m[3] ? parseInt(m[3], 10) : 0;
+                              const time = minutes * 60 + seconds + ms / 1000;
+                              return { time, text: m[4] };
+                            }
+                            return { time: 0, text: line };
+                          }).sort((a, b) =>
+                            a.time - b.time
+                          );
+                          const selected: LyricsData = {
+                            lines,
+                            source: "lrclib",
+                            synced: hasSynced,
+                          };
+                          console.log("Saving lyrics:", selected);
+                          setLyrics(selected);
+                          void saveLyrics(song.videoId, selected);
+                          setShowLyricsSearch(false);
+                        }}
+                      >
+                        <option value="">Select a lyric</option>
+                        {lyricsSearchResults.map((r) => (
+                          <option
+                            key={`${r.trackName}|${r.artistName}`}
+                            value={r.trackName}
+                          >
+                            {r.trackName} — {r.artistName}
+                            {r.duration
+                              ? ` (${Math.floor(r.duration / 60)}:${
+                                String(r.duration % 60).padStart(2, "0")
+                              })`
+                              : ""}
+                            {r.hasSynced ? " · synced" : " · plain"}
+                            {r.instrumental ? " · instrumental" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                 </>
               )}
             </div>
@@ -892,7 +930,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
               {panError}
             </p>
           )}
-          <div className="mt-4 space-y-2">
+          {
+            /* <div className="mt-4 space-y-2">
             {decoding
               ? [...Array(4)].map((_, i) => (
                 <div
@@ -923,7 +962,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
                   onExport={() => exportStem(meta.id)}
                 />
               ))}
-          </div>
+          </div> */
+          }
         </div>
       </div>
     </div>
