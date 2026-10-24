@@ -1,0 +1,75 @@
+{
+  "nodes": [
+    {
+      "id": "website_media_export_stemkit_stems_interface",
+      "label": "Stemkit audio stems browser interface",
+      "file_type": "image",
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "website_media_export_audio_stems",
+      "label": "Audio stem separation",
+      "file_type": "concept",
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "website_media_export_piano_wav",
+      "label": "piano.wav audio stem",
+      "file_type": "concept",
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "website_media_export_stemkit_stems_interface",
+      "target": "website_media_export_audio_stems",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "website_media_export_stemkit_stems_interface",
+      "target": "website_media_export_piano_wav",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "website_media_export_audio_stems",
+      "target": "website_media_export_piano_wav",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "coverage": {
+    "/Users/loopyelbarto/Development/stemkit/website/media/export.jpg": 1
+  }
+}
