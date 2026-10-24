@@ -23,6 +23,25 @@ export interface Song {
   source?: 'local'
 }
 
+export type LyricsAlign = 'left' | 'center' | 'right'
+
+export interface LyricsSettings {
+  fontSize: number
+  align: LyricsAlign
+  showTimestamps: boolean
+  color: string
+  // backdrop mode: 'auto' uses CSS contrast tricks, 'solid' uses color with backdrop
+  backdropMode: 'auto' | 'solid'
+}
+
+export const DEFAULT_LYRICS_SETTINGS: LyricsSettings = {
+  fontSize: 18,
+  align: 'center',
+  showTimestamps: true,
+  color: '#ffffff',
+  backdropMode: 'auto'
+}
+
 export interface AppSettings {
   shifts: 1 | 2
   htdemucsFt: boolean
@@ -39,6 +58,8 @@ export interface AppSettings {
   // aac (.m4a) is transcoded on export via the bundled ffmpeg. mp3 isn't an
   // option — the bundled ffmpeg is a minimal static build without libmp3lame
   exportFormat: 'wav' | 'aac'
+  // lyrics display settings
+  lyrics: LyricsSettings
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -47,7 +68,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   roformerVocals: false,
   gpuSplit: false,
   hideVideo: false,
-  exportFormat: 'wav'
+  exportFormat: 'wav',
+  lyrics: DEFAULT_LYRICS_SETTINGS
 }
 
 export interface EngineStatus {
@@ -110,6 +132,27 @@ export interface SearchResult {
   duration?: number
 }
 
+export interface LyricsLine {
+  time: number
+  text: string
+}
+
+export interface LyricsData {
+  lines: LyricsLine[]
+  source: string
+  synced: boolean
+}
+
+export interface LyricsSearchResult {
+  trackName: string
+  artistName: string
+  duration?: number
+  instrumental?: boolean
+  hasSynced: boolean
+  syncedLyrics?: string
+  plainLyrics?: string
+}
+
 export interface UpdateEvent {
   status: 'checking' | 'available' | 'none' | 'progress' | 'downloaded' | 'error'
   version?: string
@@ -147,4 +190,9 @@ export interface StemKitApi {
   onJobEvent(cb: (ev: JobEvent) => void): () => void
   onEnvEvent(cb: (ev: EnvEvent) => void): () => void
   onSettingsChange(cb: (settings: AppSettings) => void): () => void
+  // Lyrics
+  getLyrics(videoId: string, title: string, artist?: string): Promise<LyricsData>
+  saveLyrics(videoId: string, lyrics: LyricsData): Promise<void>
+  searchLyrics(query: string): Promise<LyricsData>
+  searchAllLyrics(title: string, artist?: string): Promise<LyricsSearchResult[]>
 }

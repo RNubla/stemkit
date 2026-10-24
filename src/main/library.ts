@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync, openSync, r
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { userDataDir } from './env'
-import { DEFAULT_STEMS, type Song, type StemPanMap, type StemId } from '../shared/types'
+import { DEFAULT_STEMS, type Song, type StemPanMap, type StemId, type LyricsData } from '../shared/types'
 
 // drives both the file-dialog filter and the pre-flight extension check in
 // startLocalJob; anything here is fair game for ffmpeg to decode
@@ -176,4 +176,27 @@ export async function stemBuffers(videoId: string, stems?: string[]): Promise<Re
     })
   )
   return out
+}
+
+function lyricsFile(videoId: string): string {
+  return join(songDir(videoId), 'lyrics.json')
+}
+
+export function loadLyrics(videoId: string): LyricsData | null {
+  try {
+    const raw = readFileSync(lyricsFile(videoId), 'utf8')
+    const data = JSON.parse(raw) as LyricsData
+    // Validate structure
+    if (data && Array.isArray(data.lines) && typeof data.synced === 'boolean' && typeof data.source === 'string') {
+      return data
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function saveLyrics(videoId: string, lyrics: LyricsData): void {
+  mkdirSync(songDir(videoId), { recursive: true })
+  writeFileSync(lyricsFile(videoId), JSON.stringify(lyrics, null, 2))
 }

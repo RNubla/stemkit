@@ -12,6 +12,7 @@ import { parseVideoId } from '../../../shared/url'
 import { STEM_INFO, PREFERRED_ORDER } from '../lib/stems'
 import { fmtTime } from '../lib/format'
 import { GearIcon, FolderIcon } from './Icons'
+import { PreviewModal } from './PreviewModal'
 
 interface Props {
   hasSongs: boolean
@@ -42,6 +43,7 @@ export function Home({
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchedFor, setSearchedFor] = useState('')
+  const [previewResult, setPreviewResult] = useState<SearchResult | null>(null)
   const seqRef = useRef(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -144,8 +146,24 @@ export function Home({
     void runSearch(trimmed)
   }
 
-  const startResult = (r: SearchResult): void => {
-    startWithSelection(r.videoId)
+  const openPreview = (r: SearchResult): void => {
+    setPreviewResult(r)
+  }
+
+  const closePreview = (): void => {
+    setPreviewResult(null)
+  }
+
+  const confirmSplit = (): void => {
+    if (previewResult) {
+      // Pause the preview video before splitting
+      window.dispatchEvent(new CustomEvent('preview:pause'));
+      // Small delay to ensure cleanup runs before new player mounts
+      setTimeout(() => {
+        startWithSelection(previewResult.videoId)
+      }, 100);
+      setPreviewResult(null)
+    }
   }
 
   const pickAndStart = async (): Promise<void> => {
@@ -273,7 +291,7 @@ export function Home({
                   return (
                     <button
                       key={r.videoId}
-                      onClick={() => (inProgress || failed || saved ? onSelect(r.videoId) : startResult(r))}
+                      onClick={() => (inProgress || failed || saved ? onSelect(r.videoId) : openPreview(r))}
                       title={
                         inProgress
                           ? 'View splitting progress'
@@ -281,7 +299,7 @@ export function Home({
                             ? 'View error'
                             : saved
                               ? 'Open from your library'
-                              : 'Split into stems'
+                              : 'Preview and split'
                       }
                       className={`no-drag group w-full flex items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-white/[0.06] transition-colors ${
                         inProgress || failed || saved ? '' : 'cursor-pointer'
@@ -327,6 +345,13 @@ export function Home({
             )}
           </div>
         )}
+
+        <PreviewModal
+          result={previewResult!}
+          isOpen={!!previewResult}
+          onClose={closePreview}
+          onSplit={confirmSplit}
+        />
 
         {!hasSongs && results.length === 0 && !searching && (
           <p className="mt-8 text-center text-xs text-white/25 leading-relaxed">{timeHint}</p>
