@@ -3,6 +3,8 @@ import type {
   AppSettings,
   LyricsAlign,
   LyricsData,
+  LyricsLine,
+  LyricsSearchResult,
   LyricsSettings,
   Song,
   StemId,
@@ -14,13 +16,12 @@ import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
 import {
-  applyOffset,
   formatTime,
   getCurrentLine,
   getLyrics,
-  getLyricsOffset,
   getUpcomingLines,
   saveLyrics,
+  searchAllLyrics,
 } from "../lib/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
@@ -83,8 +84,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [preset, setPreset] = useState<PresetId | "custom">("all");
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
-  const [originalLyrics, setOriginalLyrics] = useState<LyricsData | null>(null);
-  const [lyricsOffset, setLyricsOffset] = useState(0);
+  const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricsSearchResult[]>([]);
+  const [showLyricsSearch, setShowLyricsSearch] = useState(false);
+  const [isSearchingLyrics, setIsSearchingLyrics] = useState(false);
 
   const stemMeta = useMemo(
     () => buildStemMeta(Object.keys(buffers) as StemId[]),
@@ -186,21 +188,11 @@ export function Player({ song, settings }: Props): React.ReactElement {
   useEffect(() => {
     let cancelled = false;
     setLyrics(null);
-    setOriginalLyrics(null);
-    setLyricsOffset(0);
     console.log({ song });
     getLyrics(song.videoId, song.title)
       .then((data) => {
         if (!cancelled) {
-          // Store original lyrics so offset can be applied cleanly
-          setOriginalLyrics(data);
-          const savedOffset = getLyricsOffset(data);
-          setLyricsOffset(savedOffset);
-          if (savedOffset !== 0) {
-            setLyrics(applyOffset(data, savedOffset));
-          } else {
-            setLyrics(data);
-          }
+          setLyrics(data);
         }
       })
       .catch(() => {
@@ -212,14 +204,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
     // Listen for manual search results
     const handleSearchResult = (e: CustomEvent<LyricsData>) => {
       if (!cancelled) {
-        setOriginalLyrics(e.detail);
-        const savedOffset = getLyricsOffset(e.detail);
-        setLyricsOffset(savedOffset);
-        if (savedOffset !== 0) {
-          setLyrics(applyOffset(e.detail, savedOffset));
-        } else {
-          setLyrics(e.detail);
-        }
+        setLyrics(e.detail);
       }
     };
     window.addEventListener(
@@ -810,58 +795,82 @@ export function Player({ song, settings }: Props): React.ReactElement {
 
           {showLyrics && lyrics && lyrics.lines.length > 0 && (
             <div className="mt-2 flex items-center gap-2 p-2 glass rounded-xl">
-              <span className="text-xs text-white/50">Offset:</span>
               <button
                 onClick={() => {
-                  const next = Math.round((lyricsOffset - 0.5) * 10) / 10;
-                  setLyricsOffset(next);
-                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, next));
+                  setShowLyricsSearch(!showLyricsSearch);
+                  if (!showLyricsSearch && !lyricsSearchResults.length) {
+                    setIsSearchingLyrics(true);
+                    void searchAllLyrics(song.title)
+                      .then((results) => {
+                        setLyricsSearchResults(results);
+                        setIsSearchingLyrics(false);
+                      })
+                      .catch(() => {
+                        setLyricsSearchResults([]);
+                        setIsSearchingLyrics(false);
+                      });
+                  }
                 }}
-                className="no-drag w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
-                aria-label="Decrease offset"
+                className="no-drag px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-white/70 hover:text-white transition-colors"
+                title="Select different lyrics (LRCLib)"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
-                </svg>
+                {isSearchingLyrics ? "Loading…" : "Select lyrics"}
               </button>
-              <span className="w-14 text-center text-white font-mono tabular-nums text-sm">
-                {lyricsOffset >= 0 ? '+' : ''}{lyricsOffset.toFixed(1)}s
-              </span>
-              <button
-                onClick={() => {
-                  const next = Math.round((lyricsOffset + 0.5) * 10) / 10;
-                  setLyricsOffset(next);
-                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, next));
-                }}
-                className="no-drag w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition-colors"
-                aria-label="Increase offset"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              <button
-                onClick={() => {
-                  setLyricsOffset(0);
-                  if (originalLyrics) setLyrics(applyOffset(originalLyrics, 0));
-                  void saveLyrics(song.videoId, applyOffset(originalLyrics ?? lyrics!, 0));
-                }}
-                className="no-drag ml-2 px-2 py-1 text-[11px] text-white/50 hover:text-white transition-colors"
-              >
-                Reset
-              </button>
-              <button
-                onClick={() => {
-                  if (!originalLyrics) return;
-                  const saved = applyOffset(originalLyrics, lyricsOffset);
-                  saved.offset = lyricsOffset;
-                  void saveLyrics(song.videoId, saved);
-                }}
-                className="no-drag ml-2 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-[11px] text-white transition-colors"
-                title="Save offset"
-              >
-                Save
-              </button>
+
+              {showLyricsSearch && isSearchingLyrics && (
+                <span className="text-xs text-amber-400/90 animate-pulse">Loading…</span>
+              )}
+
+              {showLyricsSearch && !isSearchingLyrics && (
+                <>
+                  {lyricsSearchResults.length === 0 ? (
+                    <span className="text-xs text-white/50 italic">No lyrics found</span>
+                  ) : (
+                    <select
+                      className="glass rounded-lg text-xs text-white py-1 px-2 border border-white/10 focus:border-violet-500/50 outline-none"
+                      defaultValue=""
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) return;
+                        const result = lyricsSearchResults.find((r) => r.trackName === value);
+                        if (!result) return;
+                        const hasSynced = Boolean(result.hasSynced && result.syncedLyrics);
+                        const text = hasSynced ? result.syncedLyrics! : result.plainLyrics;
+                        if (!text) return;
+                        const lines: LyricsLine[] = text.split("\n").filter(Boolean).map((line) => {
+                          const m = line.match(/^\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/);
+                          if (m) {
+                            const minutes = parseInt(m[1], 10);
+                            const seconds = parseInt(m[2], 10);
+                            const ms = m[3] ? parseInt(m[3], 10) : 0;
+                            const time = minutes * 60 + seconds + ms / 1000;
+                            return { time, text: m[4] };
+                          }
+                          return { time: 0, text: line };
+                        }).sort((a, b) => a.time - b.time);
+                        const selected: LyricsData = {
+                          lines,
+                          source: "lrclib",
+                          synced: hasSynced,
+                        };
+                        console.log("Saving lyrics:", selected);
+                        setLyrics(selected);
+                        void saveLyrics(song.videoId, selected);
+                        setShowLyricsSearch(false);
+                      }}
+                    >
+                      <option value="">Select a lyric</option>
+                      {lyricsSearchResults.map((r) => (
+                        <option key={`${r.trackName}|${r.artistName}`} value={r.trackName}>
+                          {r.trackName} — {r.artistName}{r.duration ? ` (${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, "0")})` : ""}
+                          {r.hasSynced ? " · synced" : " · plain"}
+                          {r.instrumental ? " · instrumental" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
             </div>
           )}
 

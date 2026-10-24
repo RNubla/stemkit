@@ -586,6 +586,65 @@ app.whenReady().then(async () => {
       return await fetchLyrics(query);
     },
   );
+  ipcMain.handle(
+    "lyrics:search-all",
+    async (_e, title: string, artist?: string) => {
+      // Search lrclib and return ALL results for user selection
+      const searchQuery = artist ? `${artist} ${title}` : title;
+
+      function cleanTitle(t: string): string {
+        return t
+          .replace(/\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi, "")
+          .replace(/\s*-\s*/g, " ")
+          .replace(/\b(audio|video|music|lyric)\b/gi, "")
+          .replace(/\[.*?\]/g, "")
+          .replace(/\{.*?\}/g, "")
+          .replace(/\bpt\.(\d+)/gi, "pt $1")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      const cleanSearchQuery = artist
+        ? `${artist} ${cleanTitle(title)}`
+        : cleanTitle(title);
+
+      try {
+        const response = await fetch(
+          `https://lrclib.net/api/search?q=${encodeURIComponent(cleanSearchQuery)}`,
+          {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              Accept: "application/json",
+            },
+          },
+        );
+
+        if (response.ok) {
+          const results = await response.json() as Array<{
+            syncedLyrics: string;
+            plainLyrics: string;
+            trackName: string;
+            artistName: string;
+            duration?: number;
+            instrumental?: boolean;
+          }>;
+
+          return results.map((r) => ({
+            trackName: r.trackName,
+            artistName: r.artistName,
+            duration: r.duration,
+            instrumental: r.instrumental,
+            hasSynced: !!r.syncedLyrics,
+            syncedLyrics: r.syncedLyrics,
+            plainLyrics: r.plainLyrics,
+          }));
+        }
+      } catch (err) {
+        console.log(`LRCLIB search-all error: ${err}`);
+      }
+      return [];
+    },
+  );
   ipcMain.handle("lyrics:save", (_e, videoId: string, lyrics: unknown) => {
     // Validate lyrics structure before saving
     const data = lyrics as {

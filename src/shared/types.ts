@@ -141,7 +141,16 @@ export interface LyricsData {
   lines: LyricsLine[]
   source: string
   synced: boolean
-  offset?: number  // manual sync offset in seconds
+}
+
+export interface LyricsSearchResult {
+  trackName: string
+  artistName: string
+  duration?: number
+  instrumental?: boolean
+  hasSynced: boolean
+  syncedLyrics?: string
+  plainLyrics?: string
 }
 
 export interface UpdateEvent {
@@ -185,4 +194,5 @@ export interface StemKitApi {
   getLyrics(videoId: string, title: string, artist?: string): Promise<LyricsData>
   saveLyrics(videoId: string, lyrics: LyricsData): Promise<void>
   searchLyrics(query: string): Promise<LyricsData>
+  searchAllLyrics(title: string, artist?: string): Promise<LyricsSearchResult[]>
 }

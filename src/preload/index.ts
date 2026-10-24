@@ -43,7 +43,8 @@ const api: StemKitApi = {
   // Lyrics
   getLyrics: (videoId, title, artist) => ipcRenderer.invoke('lyrics:get', videoId, title, artist),
   saveLyrics: (videoId, lyrics) => ipcRenderer.invoke('lyrics:save', videoId, lyrics),
-  searchLyrics: (query) => ipcRenderer.invoke('lyrics:search', query)
+  searchLyrics: (query) => ipcRenderer.invoke('lyrics:search', query),
+  searchAllLyrics: (title, artist) => ipcRenderer.invoke('lyrics:search-all', title, artist)
 }
 
 contextBridge.exposeInMainWorld('stemkit', api)

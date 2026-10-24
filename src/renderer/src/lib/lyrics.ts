@@ -1,4 +1,4 @@
-import type { LyricsData, LyricsLine } from '../../../shared/types'
+import type { LyricsData, LyricsLine, LyricsSearchResult } from '../../../shared/types'
 
 // In-memory cache for active requests (prevents duplicate in-flight requests)
 const lyricsCache = new Map<string, Promise<LyricsData>>()
@@ -74,6 +74,10 @@ export function searchLyrics(query: string): Promise<LyricsData> {
   return window.stemkit.searchLyrics(query)
 }
 
+export function searchAllLyrics(title: string, artist?: string): Promise<LyricsSearchResult[]> {
+  return window.stemkit.searchAllLyrics(title, artist)
+}
+
 export function clearLyricsCache(videoId: string): void {
   lyricsCache.delete(videoId)
   const cache = loadPersistedCache()
@@ -107,27 +111,4 @@ export function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60)
   const ms = Math.floor((seconds % 1) * 100)
   return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`
-}
-
-// Apply offset to lyrics (positive = lyrics appear later, negative = earlier)
-export function applyOffset(lyrics: LyricsData, offset: number): LyricsData {
-  if (offset === 0) return lyrics
-  return {
-    ...lyrics,
-    lines: lyrics.lines.map(line => ({
-      ...line,
-      time: Math.max(0, line.time + offset) // Don't go negative
-    })),
-    offset
-  }
-}
-
-// Get offset from lyrics data
-export function getLyricsOffset(lyrics: LyricsData): number {
-  return lyrics.offset ?? 0
-}
-
-// Create lyrics data with offset
-export function createLyricsWithOffset(lyrics: LyricsData, offset: number): LyricsData {
-  return applyOffset(lyrics, offset)
 }
