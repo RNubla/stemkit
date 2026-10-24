@@ -2,32 +2,6 @@ import type { LyricsData, LyricsLine, LyricsSearchResult } from '../../../shared
 
 // In-memory cache for active requests (prevents duplicate in-flight requests)
 const lyricsCache = new Map<string, Promise<LyricsData>>()
-// localStorage key for persisting cached lyrics across sessions
-const LYRICS_CACHE_KEY = 'stemkit:lyrics-cache'
-
-// Load persisted cache from localStorage on startup
-function loadPersistedCache(): Map<string, LyricsData> {
-  try {
-    const stored = localStorage.getItem(LYRICS_CACHE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      return new Map(Object.entries(parsed))
-    }
-  } catch {
-    // Ignore parse errors, start fresh
-  }
-  return new Map()
-}
-
-// Persist cache to localStorage
-function persistCache(cache: Map<string, LyricsData>): void {
-  try {
-    const obj = Object.fromEntries(cache)
-    localStorage.setItem(LYRICS_CACHE_KEY, JSON.stringify(obj))
-  } catch {
-    // Ignore quota errors
-  }
-}
 
 export function getLyrics(videoId: string, title: string, artist?: string): Promise<LyricsData> {
   // Check in-memory cache first (for in-flight requests)
@@ -36,25 +10,13 @@ export function getLyrics(videoId: string, title: string, artist?: string): Prom
     return entry
   }
 
-  // Check localStorage for previously cached lyrics
-  const persistedCache = loadPersistedCache()
-  const cached = persistedCache.get(videoId)
-  if (cached) {
-    // Return cached lyrics as a resolved promise
-    return Promise.resolve(cached)
-  }
-
-  // Fetch from main process (which has its own file-based cache)
+  // Read lyrics from disk via the main process (the on-disk lyrics.json is
+  // the source of truth; localStorage caching is intentionally skipped so
+  // that selecting a different lyric from the dropdown replaces the saved
+  // file on disk and is picked up on the next load)
   entry = window.stemkit
     .getLyrics(videoId, title, artist)
     .then((data) => {
-      // Only persist if lyrics were actually found (lines.length > 0)
-      // This allows retrying on subsequent clicks if lyrics weren't found before
-      if (data.lines.length > 0) {
-        const cache = loadPersistedCache()
-        cache.set(videoId, data)
-        persistCache(cache)
-      }
       return data
     })
     .catch((err) => {
@@ -67,6 +29,7 @@ export function getLyrics(videoId: string, title: string, artist?: string): Prom
 }
 
 export function saveLyrics(videoId: string, lyrics: LyricsData): Promise<void> {
+  lyricsCache.delete(videoId)
   return window.stemkit.saveLyrics(videoId, lyrics)
 }
 
@@ -80,9 +43,6 @@ export function searchAllLyrics(title: string, artist?: string): Promise<LyricsS
 
 export function clearLyricsCache(videoId: string): void {
   lyricsCache.delete(videoId)
-  const cache = loadPersistedCache()
-  cache.delete(videoId)
-  persistCache(cache)
 }
 
 export function getCurrentLine(lines: LyricsLine[], currentTime: number): { line: LyricsLine; index: number } | null {
