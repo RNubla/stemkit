@@ -1,212 +1,289 @@
-import { useMemo, useState } from "react";
-import {
-  formatTime,
-  getCurrentLine,
-  getUpcomingLines,
-  searchLyrics,
-} from "../lib/lyrics";
-import type { LyricsData, LyricsLine } from "../../../shared/types";
+import React, { useEffect, useState } from "react";
+import { AppSettings } from "../../../../../shared/types";
+import { useLyrics } from "./LyricsProvider";
+import { useLyricsUtils } from "../hooks/useLyricsUtils";
+import { engine } from "../../../lib/engine";
+import { YouTubeHost } from "../../../lib/youtube";
 
-interface Props {
-  lyrics: LyricsData | null;
-  currentTime: number;
-  duration: number;
-  className?: string;
-  // For manual search when lyrics not found
-  videoId?: string;
-  title?: string;
+interface LyricsOverlayProps {
+  settings?: AppSettings;
+  playing: boolean;
+  posRef: React.MutableRefObject<number>;
+  playingRef: React.MutableRefObject<boolean>;
+  hostRef: React.MutableRefObject<YouTubeHost | null>;
+  videoSyncAtRef: React.MutableRefObject<number>;
+  setBump: React.Dispatch<React.SetStateAction<number>>;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  VIDEO_RESYNC_COOLDOWN: number;
+  VIDEO_DRIFT_LIMIT: number;
 }
 
-const LINE_HEIGHT = 40; // px per line
-const VISIBLE_LINES = 7; // current + 3 before + 3 after
+const LyricsOverlay = (
+  {
+    settings,
+    playing,
+    posRef,
+    playingRef,
+    videoSyncAtRef,
+    hostRef,
+    setBump,
+    setPlaying,
+    VIDEO_DRIFT_LIMIT,
+    VIDEO_RESYNC_COOLDOWN,
+  }: LyricsOverlayProps,
+) => {
+  const [position, setPosition] = useState(0);
 
-export function LyricsOverlay(
-  { lyrics, currentTime, duration, className = "", videoId, title }: Props,
-) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const { lyrics } = useLyrics();
+  const { getCurrentLine, formatTime, getUpcomingLines } = useLyricsUtils();
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const tick = (): void => {
+      const pos = engine.expected();
+      posRef.current = pos;
+      setPosition(pos);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim() || isSearching) return;
-    setIsSearching(true);
-    try {
-      const result = await searchLyrics(searchQuery.trim());
-      // The parent component will handle updating lyrics state
-      // We dispatch a custom event to notify the parent
-      window.dispatchEvent(
-        new CustomEvent("lyrics:search-result", { detail: result }),
-      );
-    } catch (err) {
-      console.error("Lyrics search failed:", err);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  // Always compute these, even if lyrics are empty (will be no-ops)
-  const lines = lyrics?.lines ?? [];
-  const current = useMemo(() => getCurrentLine(lines, currentTime), [
-    lines,
-    currentTime,
-  ]);
-  const upcoming = useMemo(() => getUpcomingLines(lines, currentTime, 3), [
-    lines,
-    currentTime,
-  ]);
-
-  // Build visible lines: current, previous (up to 3), next (up to 3)
-  const visibleLines = useMemo(
-    (): {
-      line: LyricsLine;
-      index: number;
-      type: "past" | "current" | "future";
-    }[] => {
-      const result: {
-        line: LyricsLine;
-        index: number;
-        type: "past" | "current" | "future";
-      }[] = [];
-
-      if (!current) {
-        // Show first few lines if we haven't reached first lyric yet
-        return lines.slice(0, VISIBLE_LINES).map((line, i) => ({
-          line,
-          index: i,
-          type: "future" as const,
-        }));
+      const dur = engine.trackDuration();
+      if (dur > 0 && pos >= dur - 0.03) {
+        posRef.current = dur;
+        setPosition(dur);
+        engine.stopAll();
+        playingRef.current = false;
+        setPlaying(false);
+        hostRef.current?.pause();
+        setBump((n) => n + 1);
+        return;
       }
 
-      // Add previous lines (up to 3)
-      const pastStart = Math.max(0, current.index - 3);
-      for (let i = pastStart; i < current.index; i++) {
-        result.push({ line: lines[i], index: i, type: "past" });
+      const now = performance.now();
+      if (now - videoSyncAtRef.current > VIDEO_RESYNC_COOLDOWN) {
+        const v = hostRef.current?.time() ?? 0;
+        if (Math.abs(v - posRef.current) > VIDEO_DRIFT_LIMIT) {
+          videoSyncAtRef.current = now;
+          hostRef.current?.seek(posRef.current);
+        }
       }
-
-      // Add current line
-      result.push({
-        line: current.line,
-        index: current.index,
-        type: "current",
-      });
-
-      // Add upcoming lines
-      upcoming.forEach((line, i) => {
-        result.push({ line, index: current.index + 1 + i, type: "future" });
-      });
-
-      return result;
-    },
-    [lines, current, upcoming],
-  );
-
-  // Calculate scroll position to keep current line centered
-  const scrollTop = useMemo(() => {
-    if (!current) return 0;
-    const currentLineIndex = visibleLines.findIndex((v) =>
-      v.index === current.index
-    );
-    if (currentLineIndex === -1) return 0;
-    return Math.max(0, (currentLineIndex - 3) * LINE_HEIGHT);
-  }, [current, visibleLines]);
-
-  if (!lyrics || !lyrics.lines.length) {
-    return (
-      <div className={`flex-1 flex flex-col ${className}`}>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-center px-4 text-white/30">
-            {lyrics?.source === "none"
-              ? "No lyrics found for this track"
-              : lyrics?.source
-              ? "No lyrics available"
-              : <span className="animate-pulse">Loading lyrics…</span>}
-          </p>
-        </div>
-        <div className="p-4 border-t border-white/5">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search lyrics manually (e.g. 'Artist - Song')"
-              className="flex-1 glass rounded-xl px-4 py-2 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              disabled={isSearching}
-            />
-            <button
-              type="submit"
-              disabled={!searchQuery.trim() || isSearching}
-              className="glass rounded-xl px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isSearching ? "Searching…" : "Search"}
-            </button>
-          </form>
-          <p className="mt-2 text-xs text-white/30 text-center">
-            Try the exact artist and song title as it appears on music databases
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+    };
+    const loop = (): void => {
+      tick();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    const backup = setInterval(tick, 400);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(backup);
+    };
+  }, [playing]);
   return (
-    <div className={`flex-1 flex flex-col overflow-hidden ${className}`}>
-      {/* Progress indicator at top */}
-      <div className="h-2 bg-white/5 rounded-t-xl overflow-hidden">
-        <div
-          className="h-full bg-violet-500 transition-all duration-300 ease-out"
-          style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
-        />
-      </div>
-
-      {/* Lyrics scroll area */}
+    <div
+      className="absolute inset-0 flex flex-col pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent"
+      style={{
+        textAlign: settings?.lyrics?.align ?? "center",
+        fontSize: `${settings?.lyrics?.fontSize ?? 18}px`,
+      }}
+    >
+      {/* Top gradient fade */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-3"
+        className="flex-1 overflow-y-auto px-4 py-6 pointer-events-auto"
         style={{ scrollBehavior: "smooth" }}
       >
         <div
-          ref={(el) => {
-            if (el) el.scrollTop = scrollTop;
-          }}
           className="min-h-full"
-          style={{ lineHeight: `${LINE_HEIGHT}px` }}
+          style={{ lineHeight: "1.5" }}
         >
-          {visibleLines.map(({ line, index, type }) => (
-            <div
-              key={index}
-              className={`flex items-center gap-3 px-2 transition-colors duration-200 ${
-                type === "current"
-                  ? "text-white font-medium scale-105"
-                  : type === "past"
-                  ? "text-white/40"
-                  : "text-white/60"
-              }`}
-              style={{ height: LINE_HEIGHT }}
-            >
-              <span className="w-16 shrink-0 text-right text-xs text-white/30 font-mono tabular-nums">
-                {formatTime(line.time)}
-              </span>
-              <span className="flex-1 truncate text-lg leading-none">
-                {line.text}
-              </span>
-            </div>
-          ))}
-
-          {/* Padding at bottom to allow scrolling past last line */}
-          <div style={{ height: LINE_HEIGHT * 3 }} />
+          {(() => {
+            const lines = lyrics.lines;
+            const current = getCurrentLine(lines, position);
+            const showTimestamps = settings?.lyrics?.showTimestamps ?? true;
+            const fontSize = settings?.lyrics?.fontSize ?? 18;
+            const lineHeight = Math.round(fontSize * 1.5);
+            const backdropMode = settings?.lyrics?.backdropMode ?? "auto";
+            const textColor = settings?.lyrics?.color ??
+              "#ffffff";
+            const isAuto = backdropMode === "auto";
+            // Both modes use custom color; Auto adds text-shadow for contrast
+            const baseTextStyle = { color: textColor };
+            const textShadowStyle = isAuto
+              ? { textShadow: "0 0 3px black, 0 0 6px black" }
+              : {};
+            const backdropStyle = isAuto ? {} : {
+              background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(2px)",
+              borderRadius: "4px",
+              padding: "0 8px",
+            };
+            if (!current) {
+              return lines.slice(0, 7).map(
+                (
+                  line: { time: number; text: string },
+                  i: number,
+                ) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 px-2 transition-colors duration-200"
+                    style={{
+                      height: lineHeight,
+                      ...baseTextStyle,
+                      ...textShadowStyle,
+                      ...backdropStyle,
+                      opacity: 0.6,
+                    }}
+                  >
+                    {showTimestamps && (
+                      <span
+                        className="w-16 shrink-0 text-right text-xs font-mono tabular-nums"
+                        style={{
+                          color: textColor,
+                          opacity: 0.3,
+                          ...textShadowStyle,
+                        }}
+                      >
+                        {formatTime(line.time)}
+                      </span>
+                    )}
+                    <span
+                      className="flex-1 truncate leading-none font-medium"
+                      style={{
+                        ...baseTextStyle,
+                        ...textShadowStyle,
+                      }}
+                    >
+                      {line.text}
+                    </span>
+                  </div>
+                ),
+              );
+            }
+            const pastStart = Math.max(0, current.index - 3);
+            const result: React.ReactNode[] = [];
+            for (let i = pastStart; i < current.index; i++) {
+              result.push(
+                <div
+                  key={i}
+                  className="flex items-center gap-3 px-2 transition-colors duration-200"
+                  style={{
+                    height: lineHeight,
+                    ...baseTextStyle,
+                    ...textShadowStyle,
+                    ...backdropStyle,
+                    opacity: 0.4,
+                  }}
+                >
+                  {showTimestamps && (
+                    <span
+                      className="w-16 shrink-0 text-right text-xs font-mono tabular-nums"
+                      style={{
+                        color: isAuto ? "white" : textColor,
+                        opacity: 0.3,
+                        ...textShadowStyle,
+                      }}
+                    >
+                      {formatTime(lines[i].time)}
+                    </span>
+                  )}
+                  <span
+                    className="flex-1 truncate leading-none font-medium"
+                    style={{
+                      ...baseTextStyle,
+                      ...textShadowStyle,
+                    }}
+                  >
+                    {lines[i].text}
+                  </span>
+                </div>,
+              );
+            }
+            result.push(
+              <div
+                key={current.index}
+                className="flex items-center gap-3 px-2 font-extrabold text-4xl scale-105 transition-colors duration-200"
+                style={{
+                  height: lineHeight,
+                  ...baseTextStyle,
+                  ...textShadowStyle,
+                  ...backdropStyle,
+                }}
+              >
+                {showTimestamps && (
+                  <span
+                    className="w-16 shrink-0 text-right text-xs font-mono tabular-nums"
+                    style={{
+                      color: isAuto ? "white" : textColor,
+                      opacity: 0.3,
+                      ...textShadowStyle,
+                    }}
+                  >
+                    {formatTime(current.line.time)}
+                  </span>
+                )}
+                <span
+                  className="flex-1 truncate leading-none font-medium"
+                  style={{
+                    ...baseTextStyle,
+                    ...textShadowStyle,
+                  }}
+                >
+                  {current.line.text}
+                </span>
+              </div>,
+            );
+            const upcoming = getUpcomingLines(
+              lines,
+              position,
+              3,
+            );
+            upcoming.forEach(
+              (
+                line: { time: number; text: string },
+                i: number,
+              ) => {
+                result.push(
+                  <div
+                    key={current.index + 1 + i}
+                    className="flex items-center gap-3 px-2 transition-colors duration-200"
+                    style={{
+                      height: lineHeight,
+                      ...baseTextStyle,
+                      ...textShadowStyle,
+                      ...backdropStyle,
+                      opacity: 0.6,
+                    }}
+                  >
+                    {showTimestamps && (
+                      <span
+                        className="w-16 shrink-0 text-right text-xs font-mono tabular-nums"
+                        style={{
+                          color: textColor,
+                          opacity: 0.3,
+                          ...textShadowStyle,
+                        }}
+                      >
+                        {formatTime(line.time)}
+                      </span>
+                    )}
+                    <span
+                      className="flex-1 truncate leading-none font-medium"
+                      style={{
+                        ...baseTextStyle,
+                        ...textShadowStyle,
+                      }}
+                    >
+                      {line.text}
+                    </span>
+                  </div>,
+                );
+              },
+            );
+            return result;
+          })()}
         </div>
       </div>
-
-      {/* Synced indicator */}
-      {lyrics.synced && (
-        <div className="flex items-center justify-center gap-2 px-4 py-2 text-xs text-white/30 border-t border-white/5">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            Synced lyrics
-          </span>
-          <span className="text-white/20">•</span>
-          <span>Source: {lyrics.source}</span>
-        </div>
-      )}
+      {/* Bottom gradient fade */}
+      <div className="h-20 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
     </div>
   );
-}
+};
+
+export { LyricsOverlay };
