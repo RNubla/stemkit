@@ -90,13 +90,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [solos, setSolos] = useState<Set<StemId>>(new Set());
   const [master, setMaster] = useState(0.9);
   const [preset, setPreset] = useState<PresetId | "custom">("karaoke");
-  // const [showLyrics, setShowLyrics] = useState(false);
-  // const [lyrics, setLyrics] = useState<LyricsData | null>(null);
-  const [lyricsSearchResults, setLyricsSearchResults] = useState<
-    LyricsSearchResult[]
-  >([]);
-  const [showLyricsSearch, setShowLyricsSearch] = useState(false);
-  const [isSearchingLyrics, setIsSearchingLyrics] = useState(false);
 
   const { showLyrics, toggleLyric, lyrics } = useLyrics();
 
@@ -201,43 +194,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
       hostRef.current = null;
     };
   }, [song.videoId]);
-
-  // Load lyrics when song changes
-  // useEffect(() => {
-  //   let cancelled = false;
-  //   setLyrics(null);
-  //   console.log({ song });
-  //   getLyrics(song.videoId, song.title)
-  //     .then((data) => {
-  //       if (!cancelled) {
-  //         setLyrics(data);
-  //       }
-  //     })
-  //     .catch(() => {
-  //       if (!cancelled) {
-  //         setLyrics({ lines: [], source: "none", synced: false });
-  //       }
-  //     });
-
-  //   // Listen for manual search results
-  //   const handleSearchResult = (e: CustomEvent<LyricsData>) => {
-  //     if (!cancelled) {
-  //       setLyrics(e.detail);
-  //     }
-  //   };
-  //   window.addEventListener(
-  //     "lyrics:search-result",
-  //     handleSearchResult as EventListener,
-  //   );
-
-  //   return () => {
-  //     cancelled = true;
-  //     window.removeEventListener(
-  //       "lyrics:search-result",
-  //       handleSearchResult as EventListener,
-  //     );
-  //   };
-  // }, [song.videoId, song.title]);
 
   useEffect(() => {
     if (!showVideo) {
@@ -732,62 +688,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 </div>
               </div>
             )}
-
-            {
-              /* <aside className="flex-1 min-w-0 glass rounded-2xl px-6 py-5 rise-in flex flex-col justify-between">
-              <div className="flex items-center gap-4">
-                <SongThumb
-                  videoId={song.videoId}
-                  className="w-32 h-[72px] rounded-lg object-cover bg-white/5 shrink-0 block"
-                  iconClassName="w-7 h-7 text-white/25"
-                />
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-xl font-semibold leading-snug truncate">{song.title}</h3>
-                  <p className="text-xs text-white/45 mt-1.5 font-mono truncate">
-                    {fmtTime(song.duration)} · added {addedLabel}
-                    {song.took ? ` · split in ${fmtTime(song.took)}` : ''}
-                  </p>
-                </div>
-                <span className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/5 text-white/50 font-medium">
-                  {stemMeta.length} stems
-                </span>
-              </div>
-
-              {!showVideo && decodeError && (
-                <div className="rounded-xl bg-rose-500/10 border border-rose-400/20 px-3 py-2 text-xs text-rose-200 break-words">
-                  {decodeError}
-                </div>
-              )}
-
-              <div className="flex items-center gap-x-6 gap-y-2 flex-wrap">
-                {stemMeta.map((meta) => (
-                  <span key={meta.id} className="flex items-center gap-2 text-[14px] text-white/75">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: meta.color }} />
-                    <span className="capitalize">{meta.label}</span>
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={exportAllStems}
-                  disabled={decoding || !!decodeError}
-                  className="no-drag glass rounded-xl px-5 py-3 text-[13px] font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-2 disabled:opacity-40"
-                >
-                  <DownloadIcon className="w-4 h-4" />
-                  Export everything
-                </button>
-                {youtubeUrl && (
-                  <button
-                    onClick={() => window.stemkit.openExternal(youtubeUrl)}
-                    className="no-drag glass rounded-xl px-5 py-3 text-[13px] font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    Open on YouTube
-                  </button>
-                )}
-              </div>
-            </aside> */
-            }
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -817,119 +717,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
           </div>
 
           {showLyrics && <LyricSelection />}
-
-          {
-            /* {showLyrics && (
-            <div className="mt-2 flex items-center gap-2 p-2 glass rounded-xl">
-              <button
-                onClick={() => {
-                  setShowLyricsSearch(!showLyricsSearch);
-                  if (!showLyricsSearch && !lyricsSearchResults.length) {
-                    setIsSearchingLyrics(true);
-                    void searchAllLyrics(song.title)
-                      .then((results) => {
-                        setLyricsSearchResults(results);
-                        setIsSearchingLyrics(false);
-                      })
-                      .catch(() => {
-                        setLyricsSearchResults([]);
-                        setIsSearchingLyrics(false);
-                      });
-                  }
-                }}
-                className="no-drag px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-white/70 hover:text-white transition-colors"
-                title="Select different lyrics (LRCLib)"
-              >
-                {isSearchingLyrics ? "Loading…" : "Select lyrics"}
-              </button>
-
-              {showLyricsSearch && isSearchingLyrics && (
-                <span className="text-xs text-amber-400/90 animate-pulse">
-                  Loading…
-                </span>
-              )}
-
-              {showLyricsSearch && !isSearchingLyrics && (
-                <>
-                  {lyricsSearchResults.length === 0
-                    ? (
-                      <span className="text-xs text-white/50 italic">
-                        No lyrics found
-                      </span>
-                    )
-                    : (
-                      <select
-                        className="glass rounded-lg text-xs text-white py-1 px-2 border border-white/10 focus:border-violet-500/50 outline-none"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (!value) return;
-                          const result = lyricsSearchResults.find((r) =>
-                            r.trackName === value
-                          );
-                          if (!result) {
-                            return;
-                          }
-                          const hasSynced = Boolean(
-                            result.hasSynced && result.syncedLyrics,
-                          );
-                          const text = hasSynced
-                            ? result.syncedLyrics!
-                            : result.plainLyrics;
-                          if (!text) {
-                            return;
-                          }
-                          const lines: LyricsLine[] = text.split("\n").filter(
-                            Boolean,
-                          ).map((line) => {
-                            const m = line.match(
-                              /^\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/,
-                            );
-                            if (m) {
-                              const minutes = parseInt(m[1], 10);
-                              const seconds = parseInt(m[2], 10);
-                              const ms = m[3] ? parseInt(m[3], 10) : 0;
-                              const time = minutes * 60 + seconds + ms / 1000;
-                              return { time, text: m[4] };
-                            }
-                            return { time: 0, text: line };
-                          }).sort((a, b) =>
-                            a.time - b.time
-                          );
-                          const selected: LyricsData = {
-                            lines,
-                            source: "lrclib",
-                            synced: hasSynced,
-                          };
-                          console.log("Saving lyrics:", selected);
-                          setLyrics(selected);
-                          void saveLyrics(song.videoId, selected);
-                          setShowLyricsSearch(false);
-                        }}
-                      >
-                        <option value="">Select a lyric</option>
-                        {lyricsSearchResults.map((r) => (
-                          <option
-                            key={`${r.trackName}|${r.artistName}`}
-                            value={r.trackName}
-                          >
-                            {r.trackName} — {r.artistName}
-                            {r.duration
-                              ? ` (${Math.floor(r.duration / 60)}:${
-                                String(r.duration % 60).padStart(2, "0")
-                              })`
-                              : ""}
-                            {r.hasSynced ? " · synced" : " · plain"}
-                            {r.instrumental ? " · instrumental" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                </>
-              )}
-            </div>
-          )} */
-          }
 
           <Transport
             playing={playing}

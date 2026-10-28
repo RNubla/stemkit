@@ -1,17 +1,12 @@
 import React, { createContext, useContext, useState } from "react";
-import {
-    LyricsData,
-    LyricsSearchResult,
-    Song,
-} from "../../../../../shared/types";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { LyricsData, Song } from "../../../../../shared/types";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { useLyricsUtils } from "../hooks/useLyricsUtils";
 
 interface LyricContext {
     songTitle: string;
     songId: string;
     showLyrics: boolean;
-    showLyricSearch: boolean;
     toggleLyric: () => void;
     lyrics: LyricsData | null;
 }
@@ -22,7 +17,6 @@ const LyricProvider = (
     { children, song }: { children: React.ReactNode; song: Song },
 ) => {
     const [showLyrics, setShowLyrics] = useState(false);
-    const [showLyricSearch, setShowLyricSearch] = useState(true);
 
     const { getLyrics } = useLyricsUtils();
 
@@ -42,7 +36,6 @@ const LyricProvider = (
         songTitle: song.title,
         songId: song.videoId,
         showLyrics,
-        showLyricSearch,
         toggleLyric,
         lyrics,
     };
