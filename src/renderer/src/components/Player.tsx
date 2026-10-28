@@ -1,18 +1,6 @@
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
-  LyricsAlign,
-  LyricsData,
-  LyricsLine,
-  LyricsSearchResult,
-  LyricsSettings,
   Song,
   StemId,
   StemPanMap,
@@ -22,20 +10,7 @@ import { buildStemMeta } from "../lib/stems";
 import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
 import { type PresetId, Transport } from "./Transport";
-import {
-  formatTime,
-  getCurrentLine,
-  getLyrics,
-  getUpcomingLines,
-  saveLyrics,
-  searchAllLyrics,
-} from "../lib/lyrics";
-import {
-  LyricProvider,
-  LyricSelection,
-  LyricsOverlay,
-  useLyrics,
-} from "../features/lyrics";
+import { LyricSelection, LyricsOverlay, useLyrics } from "../features/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
 const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
