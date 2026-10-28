@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AppSettings,
   LyricsAlign,
@@ -23,6 +30,7 @@ import {
   saveLyrics,
   searchAllLyrics,
 } from "../lib/lyrics";
+import { LyricProvider, LyricSelection, useLyrics } from "../features/lyrics";
 
 // number keys 1-6 mute the lane shown in that position, top to bottom
 const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
@@ -82,13 +90,15 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const [solos, setSolos] = useState<Set<StemId>>(new Set());
   const [master, setMaster] = useState(0.9);
   const [preset, setPreset] = useState<PresetId | "custom">("karaoke");
-  const [showLyrics, setShowLyrics] = useState(false);
-  const [lyrics, setLyrics] = useState<LyricsData | null>(null);
+  // const [showLyrics, setShowLyrics] = useState(false);
+  // const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [lyricsSearchResults, setLyricsSearchResults] = useState<
     LyricsSearchResult[]
   >([]);
   const [showLyricsSearch, setShowLyricsSearch] = useState(false);
   const [isSearchingLyrics, setIsSearchingLyrics] = useState(false);
+
+  const { showLyrics, toggleLyric, lyrics } = useLyrics();
 
   const stemMeta = useMemo(
     () => buildStemMeta(Object.keys(buffers) as StemId[]),
@@ -193,41 +203,41 @@ export function Player({ song, settings }: Props): React.ReactElement {
   }, [song.videoId]);
 
   // Load lyrics when song changes
-  useEffect(() => {
-    let cancelled = false;
-    setLyrics(null);
-    console.log({ song });
-    getLyrics(song.videoId, song.title)
-      .then((data) => {
-        if (!cancelled) {
-          setLyrics(data);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLyrics({ lines: [], source: "none", synced: false });
-        }
-      });
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   setLyrics(null);
+  //   console.log({ song });
+  //   getLyrics(song.videoId, song.title)
+  //     .then((data) => {
+  //       if (!cancelled) {
+  //         setLyrics(data);
+  //       }
+  //     })
+  //     .catch(() => {
+  //       if (!cancelled) {
+  //         setLyrics({ lines: [], source: "none", synced: false });
+  //       }
+  //     });
 
-    // Listen for manual search results
-    const handleSearchResult = (e: CustomEvent<LyricsData>) => {
-      if (!cancelled) {
-        setLyrics(e.detail);
-      }
-    };
-    window.addEventListener(
-      "lyrics:search-result",
-      handleSearchResult as EventListener,
-    );
+  //   // Listen for manual search results
+  //   const handleSearchResult = (e: CustomEvent<LyricsData>) => {
+  //     if (!cancelled) {
+  //       setLyrics(e.detail);
+  //     }
+  //   };
+  //   window.addEventListener(
+  //     "lyrics:search-result",
+  //     handleSearchResult as EventListener,
+  //   );
 
-    return () => {
-      cancelled = true;
-      window.removeEventListener(
-        "lyrics:search-result",
-        handleSearchResult as EventListener,
-      );
-    };
-  }, [song.videoId, song.title]);
+  //   return () => {
+  //     cancelled = true;
+  //     window.removeEventListener(
+  //       "lyrics:search-result",
+  //       handleSearchResult as EventListener,
+  //     );
+  //   };
+  // }, [song.videoId, song.title]);
 
   useEffect(() => {
     if (!showVideo) {
@@ -781,7 +791,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowLyrics(!showLyrics)}
+              onClick={() => toggleLyric()}
               className={`glass rounded-xl px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2 ${
                 showLyrics
                   ? "text-white bg-white/10"
@@ -806,7 +816,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
             </button>
           </div>
 
-          {showLyrics && lyrics && lyrics.lines.length > 0 && (
+          {showLyrics && <LyricSelection />}
+
+          {showLyrics && (
             <div className="mt-2 flex items-center gap-2 p-2 glass rounded-xl">
               <button
                 onClick={() => {
