@@ -388,7 +388,10 @@ async function createWindow(): Promise<void> {
       backgroundThrottling: false,
     },
   });
-  mainWindow.webContents.openDevTools();
+  // Only show in dev
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
@@ -594,7 +597,10 @@ app.whenReady().then(async () => {
 
       function cleanTitle(t: string): string {
         return t
-          .replace(/\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi, "")
+          .replace(
+            /\((official|official video|official audio|official music video|music video|offical|offical video|offical audio|audio|video|lyrics?|visualizer|live|remastered?|hd|4k)[\s)]*/gi,
+            "",
+          )
           .replace(/\s*-\s*/g, " ")
           .replace(/\b(audio|video|music|lyric)\b/gi, "")
           .replace(/\[.*?\]/g, "")
@@ -610,10 +616,13 @@ app.whenReady().then(async () => {
 
       try {
         const response = await fetch(
-          `https://lrclib.net/api/search?q=${encodeURIComponent(cleanSearchQuery)}`,
+          `https://lrclib.net/api/search?q=${
+            encodeURIComponent(cleanSearchQuery)
+          }`,
           {
             headers: {
-              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "User-Agent":
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               Accept: "application/json",
             },
           },
