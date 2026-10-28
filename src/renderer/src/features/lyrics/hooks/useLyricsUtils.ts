@@ -81,6 +81,15 @@ const useLyricsUtils = () => {
         return lines.slice(start, start + count);
     };
 
+    const trackDuration = (duration?: number) => {
+        if (duration) {
+            return ` (${Math.floor(duration / 60)}:${
+                String(duration % 60).padStart(2, "0")
+            })`;
+        }
+        return "";
+    };
+
     return {
         getLyrics,
         saveLyrics,
@@ -88,6 +97,7 @@ const useLyricsUtils = () => {
         searchAllLyrics,
         clearLyricsCache,
         getUpcomingLines,
+        trackDuration,
     };
 };
 

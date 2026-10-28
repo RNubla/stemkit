@@ -818,7 +818,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
 
           {showLyrics && <LyricSelection />}
 
-          {showLyrics && (
+          {
+            /* {showLyrics && (
             <div className="mt-2 flex items-center gap-2 p-2 glass rounded-xl">
               <button
                 onClick={() => {
@@ -927,7 +928,8 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 </>
               )}
             </div>
-          )}
+          )} */
+          }
 
           <Transport
             playing={playing}

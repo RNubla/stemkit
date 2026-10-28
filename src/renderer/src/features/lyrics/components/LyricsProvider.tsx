@@ -9,6 +9,7 @@ import { useLyricsUtils } from "../hooks/useLyricsUtils";
 
 interface LyricContext {
     songTitle: string;
+    songId: string;
     showLyrics: boolean;
     showLyricSearch: boolean;
     toggleLyric: () => void;
@@ -39,6 +40,7 @@ const LyricProvider = (
 
     const context: LyricContext = {
         songTitle: song.title,
+        songId: song.videoId,
         showLyrics,
         showLyricSearch,
         toggleLyric,
