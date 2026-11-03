@@ -444,6 +444,11 @@ app.whenReady().then(async () => {
     applyGpuOverride();
     await detectTools();
     void detectGpuVendor();
+
+    // Re-check readiness on every status call so restarts don't trigger Setup.
+    // This checks for the .ready marker and necessary binaries.
+    await refreshReady();
+
     const status = {
       ...getStatus(),
       gpu: gpuAccelerationInfo(),

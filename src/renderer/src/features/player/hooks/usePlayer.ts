@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type {
   AppSettings,
+  PresetId,
   Song,
   StemId,
   StemPanMap,
-  PresetId,
 } from "../../../../shared/types";
 import { type BufferMap, decodePayload, engine } from "../../../lib/engine";
 import { buildStemMeta } from "../../../lib/stems";
@@ -323,6 +323,117 @@ export function usePlayer(
   const panRevision = useRef(0);
 
   const { getLyrics } = useLyricsUtils();
+  const getLyricsRef = useRef(getLyrics);
+  getLyricsRef.current = getLyrics;
+
+  // -------------------------------------------------------------------------
+  // Action creators (stable refs via useCallback) — placed early so effects can use them
+  // -------------------------------------------------------------------------
+  const play = useCallback(() => {
+    dispatch({ type: "PLAY" });
+    playingRef.current = true;
+    engine.setPlaying(true, posRef.current);
+    hostRef.current?.play();
+  }, [dispatch]);
+
+  const pause = useCallback(() => {
+    dispatch({ type: "PAUSE" });
+    playingRef.current = false;
+    engine.setPlaying(false, posRef.current);
+    hostRef.current?.pause();
+  }, [dispatch]);
+
+  const togglePlay = useCallback(() => {
+    dispatch({ type: state.phase === "playing" ? "PAUSE" : "PLAY" });
+    if (state.phase === "playing") {
+      playingRef.current = false;
+      engine.setPlaying(false, posRef.current);
+      hostRef.current?.pause();
+    } else {
+      playingRef.current = true;
+      engine.setPlaying(true, posRef.current);
+      hostRef.current?.play();
+    }
+  }, [state.phase, dispatch]);
+
+  const seekTo = useCallback((t: number) => {
+    const clamped = Math.max(
+      0,
+      Math.min(state.duration > 0 ? state.duration - 0.05 : t, t),
+    );
+    posRef.current = clamped;
+    engine.setPlaying(state.phase === "playing", clamped);
+    videoSyncAtRef.current = performance.now();
+    hostRef.current?.seek(clamped);
+    dispatch({ type: "SEEK", position: clamped });
+  }, [state.duration, state.phase, dispatch]);
+
+  const setVolume = useCallback((stem: StemId, value: number) => {
+    dispatch({ type: "SET_VOL", stem, value });
+  }, [dispatch]);
+
+  const setPan = useCallback((stem: StemId, value: number) => {
+    const next = { ...state.pans, [stem]: value };
+    dispatch({ type: "SET_PAN", stem, value });
+
+    // Debounced persistence
+    const generation = panGeneration.current;
+    const revision = ++panRevision.current;
+    pendingPan.current = { videoId: song.videoId, pans: next };
+    if (panSaveTimer.current !== null) clearTimeout(panSaveTimer.current);
+    panSaveTimer.current = setTimeout(() => {
+      panSaveTimer.current = null;
+      const pending = pendingPan.current;
+      pendingPan.current = null;
+      if (!pending) return;
+      void window.stemkit
+        .setStemPan(pending.videoId, pending.pans)
+        .then(() => {
+          if (
+            generation === panGeneration.current &&
+            revision === panRevision.current
+          ) {
+            dispatch({ type: "SET_PAN_ERROR", error: null });
+          }
+        })
+        .catch(() => {
+          if (
+            generation === panGeneration.current &&
+            revision === panRevision.current
+          ) {
+            dispatch({
+              type: "SET_PAN_ERROR",
+              error:
+                "Could not save pan settings. Your live pan is still applied.",
+            });
+          }
+        });
+    }, PAN_SAVE_DEBOUNCE);
+  }, [song.videoId, state.pans, dispatch]);
+
+  const toggleMute = useCallback((stem: StemId) => {
+    dispatch({ type: "TOGGLE_MUTE", stem });
+  }, []);
+
+  const toggleSolo = useCallback((stem: StemId) => {
+    dispatch({ type: "TOGGLE_SOLO", stem });
+  }, []);
+
+  const setMaster = useCallback((value: number) => {
+    dispatch({ type: "SET_MASTER", value });
+  }, []);
+
+  const applyPreset = useCallback((preset: PresetId) => {
+    dispatch({ type: "APPLY_PRESET", preset });
+  }, []);
+
+  const exportStem = useCallback(
+    async (stem: string) => {
+      await window.stemkit.exportStem(song.videoId, stem);
+    },
+    [song.videoId],
+  );
+
   const isLocal = song.source === "local";
   const showVideo = !(settings?.hideVideo ?? false) && !isLocal;
 
@@ -335,6 +446,8 @@ export function usePlayer(
 
     // Reset state for new song
     dispatch({ type: "LOAD_START", song });
+    posRef.current = 0;
+    videoSyncAtRef.current = 0;
 
     // Cleanup pan timer on unmount
     const flushPan = (): void => {
@@ -355,7 +468,10 @@ export function usePlayer(
       getDecoded(song.videoId),
       window.stemkit.getStemPan(song.videoId).catch(() => {
         if (!cancelled) {
-          dispatch({ type: "SET_PAN_ERROR", error: "Could not load saved pan settings. Using center." });
+          dispatch({
+            type: "SET_PAN_ERROR",
+            error: "Could not load saved pan settings. Using center.",
+          });
         }
         return {} as StemPanMap;
       }),
@@ -374,7 +490,7 @@ export function usePlayer(
       });
 
     // Load lyrics in background
-    void getLyrics(song.videoId, song.title);
+    void getLyricsRef.current(song.videoId, song.title);
 
     return () => {
       cancelled = true;
@@ -385,7 +501,7 @@ export function usePlayer(
       hostRef.current?.destroy();
       hostRef.current = null;
     };
-  }, [song.videoId, getLyrics]);
+  }, [song.videoId]);
 
   // -------------------------------------------------------------------------
   // Effect: YouTube player mount/unmount
@@ -397,7 +513,9 @@ export function usePlayer(
       dispatch({ type: "YT_READY" }); // audio-only doesn't need YT
       return;
     }
-    if (state.phase === "decoding" || state.phase === "error" || hostRef.current) {
+    if (
+      state.phase === "decoding" || state.phase === "error" || hostRef.current
+    ) {
       return;
     }
 
@@ -433,7 +551,13 @@ export function usePlayer(
   // Effect: Audio engine mix updates
   // -------------------------------------------------------------------------
   useEffect(() => {
-    engine.applyMix(state.vols, state.mutes, state.solos, state.master, state.pans);
+    engine.applyMix(
+      state.vols,
+      state.mutes,
+      state.solos,
+      state.master,
+      state.pans,
+    );
   }, [state.vols, state.mutes, state.solos, state.master, state.pans]);
 
   // -------------------------------------------------------------------------
@@ -494,7 +618,11 @@ export function usePlayer(
       if (e.target instanceof HTMLInputElement) return;
       if (e.code === "Space") {
         e.preventDefault();
-        dispatch({ type: state.phase === "playing" ? "PAUSE" : "PLAY" });
+        if (state.phase === "playing") {
+          pause();
+        } else {
+          play();
+        }
         return;
       }
       const lane = STEM_KEYS.indexOf(e.key);
@@ -511,101 +639,12 @@ export function usePlayer(
         e.preventDefault();
         const step = e.shiftKey ? 15 : 5;
         const direction = e.code === "ArrowLeft" ? -1 : 1;
-        dispatch({
-          type: "SEEK",
-          position: Math.max(0, posRef.current + direction * step),
-        });
+        seekTo(posRef.current + direction * step);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.phase, state.stemMeta]);
-
-  // -------------------------------------------------------------------------
-  // Action creators (stable refs via useCallback)
-  // -------------------------------------------------------------------------
-  const play = useCallback(() => dispatch({ type: "PLAY" }), []);
-  const pause = useCallback(() => dispatch({ type: "PAUSE" }), []);
-  const togglePlay = useCallback(() => {
-    dispatch({ type: state.phase === "playing" ? "PAUSE" : "PLAY" });
-  }, [state.phase]);
-
-  const seekTo = useCallback((t: number) => {
-    const clamped = Math.max(
-      0,
-      Math.min(state.duration > 0 ? state.duration - 0.05 : t, t),
-    );
-    posRef.current = clamped;
-    engine.setPlaying(playingRef.current, clamped);
-    videoSyncAtRef.current = performance.now();
-    hostRef.current?.seek(clamped);
-    dispatch({ type: "SEEK", position: clamped });
-  }, [state.duration]);
-
-  const setVolume = useCallback((stem: StemId, value: number) => {
-    dispatch({ type: "SET_VOL", stem, value });
-  }, []);
-
-  const setPan = useCallback((stem: StemId, value: number) => {
-    const next = { ...state.pans, [stem]: value };
-    dispatch({ type: "SET_PAN", stem, value });
-
-    // Debounced persistence
-    const generation = panGeneration.current;
-    const revision = ++panRevision.current;
-    pendingPan.current = { videoId: song.videoId, pans: next };
-    if (panSaveTimer.current !== null) clearTimeout(panSaveTimer.current);
-    panSaveTimer.current = setTimeout(() => {
-      panSaveTimer.current = null;
-      const pending = pendingPan.current;
-      pendingPan.current = null;
-      if (!pending) return;
-      void window.stemkit
-        .setStemPan(pending.videoId, pending.pans)
-        .then(() => {
-          if (
-            generation === panGeneration.current &&
-            revision === panRevision.current
-          ) {
-            dispatch({ type: "SET_PAN_ERROR", error: null });
-          }
-        })
-        .catch(() => {
-          if (
-            generation === panGeneration.current &&
-            revision === panRevision.current
-          ) {
-            dispatch({
-              type: "SET_PAN_ERROR",
-              error: "Could not save pan settings. Your live pan is still applied.",
-            });
-          }
-        });
-    }, PAN_SAVE_DEBOUNCE);
-  }, [song.videoId, state.pans]);
-
-  const toggleMute = useCallback((stem: StemId) => {
-    dispatch({ type: "TOGGLE_MUTE", stem });
-  }, []);
-
-  const toggleSolo = useCallback((stem: StemId) => {
-    dispatch({ type: "TOGGLE_SOLO", stem });
-  }, []);
-
-  const setMaster = useCallback((value: number) => {
-    dispatch({ type: "SET_MASTER", value });
-  }, []);
-
-  const applyPreset = useCallback((preset: PresetId) => {
-    dispatch({ type: "APPLY_PRESET", preset });
-  }, []);
-
-  const exportStem = useCallback(
-    async (stem: string) => {
-      await window.stemkit.exportStem(song.videoId, stem);
-    },
-    [song.videoId],
-  );
+  }, [state.phase, state.stemMeta, play, pause, seekTo]);
 
   const getPosition = useCallback((): number => posRef.current, []);
 
