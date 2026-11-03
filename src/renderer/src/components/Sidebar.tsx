@@ -52,7 +52,7 @@ export function Sidebar({
       <div className="drag-region h-14 shrink-0 flex items-center gap-2.5 pl-[80px] pr-4">
         <LogoMark />
         <span className="font-semibold tracking-tight text-[15px]">
-          StemKit
+          Karaoke
         </span>
         <button
           onClick={onOpenSettings}

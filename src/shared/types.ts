@@ -159,7 +159,7 @@ export interface UpdateEvent {
   pct?: number
 }
 
-export interface StemKitApi {
+export interface KaraokeApi {
   envStatus(): Promise<EnvStatus>
   envBootstrap(): Promise<boolean>
   envUpdateYtDlp(): Promise<boolean>

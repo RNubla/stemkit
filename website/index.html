@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>StemKit: split songs from YouTube into stems</title>
+    <title>Karaoke: split songs from YouTube into stems</title>
     <meta
       name="description"
       content="Paste a YouTube link or open a local file, pick your instruments, and get vocals, drums, bass, guitar and piano as synced stems. Free and open source, and it runs entirely on your machine."
     />
-    <meta property="og:title" content="StemKit: split songs from YouTube into stems" />
+    <meta property="og:title" content="Karaoke: split songs from YouTube into stems" />
     <meta
       property="og:description"
       content="Free, open source, and it runs entirely on your machine. Karaoke tracks, acapellas and instrumentals from any YouTube link."
@@ -16,7 +16,7 @@
     <meta property="og:image" content="https://stemkit.pages.dev/media/og.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="StemKit splitting a song into six synced stems" />
+    <meta property="og:image:alt" content="Karaoke splitting a song into six synced stems" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://stemkit.pages.dev/media/og.jpg" />
     <link rel="icon" type="image/png" href="icon.png" />
@@ -709,8 +709,8 @@
     <div class="wrap">
       <nav>
         <a class="brand" href="/">
-          <img src="icon.png" alt="StemKit icon" />
-          <span>StemKit</span>
+          <img src="icon.png" alt="Karaoke icon" />
+          <span>Karaoke</span></span>
         </a>
         <div class="right">
           <a
@@ -858,7 +858,7 @@
           playsinline
           preload="metadata"
           disablepictureinpicture
-          aria-label="StemKit demo"
+          aria-label="Karaoke demo"
         >
           <source src="media/hero-loop.mp4" type="video/mp4" />
           <source src="media/hero-loop.webm" type="video/webm" />
@@ -890,7 +890,7 @@
             </ul>
           </div>
           <figure class="shot zoom">
-            <img src="media/yt-search.jpg" alt="StemKit search screen with YouTube results" />
+            <img src="media/yt-search.jpg" alt="Karaoke search screen with YouTube results" />
           </figure>
         </div>
       </section>
@@ -911,7 +911,7 @@
             </ul>
           </div>
           <figure class="shot">
-            <img src="media/stems.jpg" alt="StemKit splitting a song by instrument" />
+            <img src="media/stems.jpg" alt="Karaoke splitting a song by instrument" />
           </figure>
         </div>
       </section>
@@ -933,7 +933,7 @@
             </ul>
           </div>
           <figure class="shot">
-            <img src="media/export.jpg" alt="StemKit export menu" />
+            <img src="media/export.jpg" alt="Karaoke export menu" />
           </figure>
         </div>
       </section>
@@ -1307,7 +1307,7 @@
           <div class="req">
             <b>First launch</b
             ><span
-              >StemKit downloads its own engine, about 2GB, once. Internet is needed for that and
+              >Karaoke downloads its own engine, about 2GB, once. Internet is needed for that and
               for YouTube links; local files work offline.</span
             >
           </div>
@@ -1334,14 +1334,14 @@
                 stroke-linejoin="round"
               />
             </svg>
-            <span id="dl2-label">Download StemKit</span>
+            <span id="dl2-label">Download Karaoke</span>
           </a>
         </div>
       </div>
 
       <footer>
         <span class="note"
-          >© 2026 StemKit · MIT license · not affiliated with YouTube or Google</span
+          >© 2026 Karaoke · MIT license · not affiliated with YouTube or Google</span
         >
         <div class="links">
           <a
@@ -1379,7 +1379,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
       (function () {
-        var REPO = "danvelope/stemkit";
+        var REPO = "danvelope/karaoke";
         var ua = navigator.userAgent;
         var os = /Mac/i.test(ua)
           ? "mac"
@@ -1411,10 +1411,10 @@
                 ? "Download for Windows"
                 : os === "linux"
                   ? "Download for Linux"
-                  : "Get StemKit";
+                  : "Get Karaoke";
           var href = pick ? pick.browser_download_url : release.html_url;
           var cap = pick
-            ? "StemKit " +
+            ? "Karaoke " +
               release.tag_name.replace(/^v/, "") +
               " · " +
               Math.round(pick.size / 1048576) +

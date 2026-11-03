@@ -3,7 +3,7 @@ import type {
   AppSettings,
   EnvEvent,
   JobEvent,
-  StemKitApi,
+  KaraokeApi,
   UpdateEvent,
 } from "../shared/types";
 
@@ -15,7 +15,7 @@ function subscribe<T>(channel: string, cb: (data: T) => void): () => void {
   };
 }
 
-const api: StemKitApi = {
+const api: KaraokeApi = {
   envStatus: () => ipcRenderer.invoke("env:status"),
   envBootstrap: () => ipcRenderer.invoke("env:bootstrap"),
   envUpdateYtDlp: () => ipcRenderer.invoke("env:update-ytdlp"),
