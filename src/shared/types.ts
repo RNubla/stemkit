@@ -1,5 +1,6 @@
 export type StemId = 'vocals' | 'drums' | 'bass' | 'other' | 'piano' | 'guitar'
 export type StemPanMap = Partial<Record<StemId, number>>
+export type PresetId = 'all' | 'karaoke' | 'karaoke-low' | 'acapella' | 'drumnbass'
 
 // which GPU vendor GPU acceleration targets: NVIDIA via CUDA torch (windows
 // + linux), AMD via ROCm torch (linux only)

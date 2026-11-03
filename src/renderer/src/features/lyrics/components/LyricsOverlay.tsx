@@ -12,8 +12,6 @@ interface LyricsOverlayProps {
   playingRef: React.MutableRefObject<boolean>;
   hostRef: React.MutableRefObject<YouTubeHost | null>;
   videoSyncAtRef: React.MutableRefObject<number>;
-  setBump: React.Dispatch<React.SetStateAction<number>>;
-  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   VIDEO_RESYNC_COOLDOWN: number;
   VIDEO_DRIFT_LIMIT: number;
 }
@@ -26,56 +24,31 @@ const LyricsOverlay = (
     playingRef,
     videoSyncAtRef,
     hostRef,
-    setBump,
-    setPlaying,
     VIDEO_DRIFT_LIMIT,
     VIDEO_RESYNC_COOLDOWN,
   }: LyricsOverlayProps,
 ) => {
-  const [position, setPosition] = useState(0);
-
   const { lyrics } = useLyrics();
   const { getCurrentLine, formatTime, getUpcomingLines } = useLyricsUtils();
+
+  // Sync position from the main player's ref for rendering
+  const [position, setPosition] = useState(0);
+
+  // Update local position from shared ref (runs on each frame via requestAnimationFrame)
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
     const tick = (): void => {
-      const pos = engine.expected();
-      posRef.current = pos;
+      const pos = posRef.current;
       setPosition(pos);
-
-      const dur = engine.trackDuration();
-      if (dur > 0 && pos >= dur - 0.03) {
-        posRef.current = dur;
-        setPosition(dur);
-        engine.stopAll();
-        playingRef.current = false;
-        setPlaying(false);
-        hostRef.current?.pause();
-        setBump((n) => n + 1);
-        return;
-      }
-
-      const now = performance.now();
-      if (now - videoSyncAtRef.current > VIDEO_RESYNC_COOLDOWN) {
-        const v = hostRef.current?.time() ?? 0;
-        if (Math.abs(v - posRef.current) > VIDEO_DRIFT_LIMIT) {
-          videoSyncAtRef.current = now;
-          hostRef.current?.seek(posRef.current);
-        }
-      }
     };
     const loop = (): void => {
       tick();
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    const backup = setInterval(tick, 400);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearInterval(backup);
-    };
-  }, [playing]);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, posRef]);
   return (
     <div
       className="absolute inset-0 flex flex-col pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent"

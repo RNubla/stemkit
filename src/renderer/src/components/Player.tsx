@@ -1,38 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
+import {
   AppSettings,
   Song,
-  StemId,
-  StemPanMap,
 } from "../../../shared/types";
-import { type BufferMap, decodePayload, engine } from "../lib/engine";
-import { buildStemMeta } from "../lib/stems";
-import { YouTubeHost, type YTState } from "../lib/youtube";
 import { StemLane } from "./StemLane";
-import { type PresetId, Transport } from "./Transport";
+import { Transport } from "./Transport";
 import { LyricSelection, LyricsOverlay, useLyrics } from "../features/lyrics";
-
-// number keys 1-6 mute the lane shown in that position, top to bottom
-const STEM_KEYS = ["1", "2", "3", "4", "5", "6"];
-
-type BufferCacheMap = BufferMap;
-
-const bufferCache = new Map<string, Promise<BufferCacheMap>>();
-
-function getDecoded(videoId: string): Promise<BufferCacheMap> {
-  let entry = bufferCache.get(videoId);
-  if (!entry) {
-    entry = window.stemkit
-      .getBuffers(videoId)
-      .then((payload) => decodePayload(payload))
-      .catch((err) => {
-        bufferCache.delete(videoId);
-        throw err;
-      });
-    bufferCache.set(videoId, entry);
-  }
-  return entry;
-}
+import { usePlayer } from "../features/player";
 
 interface Props {
   song: Song;
@@ -40,388 +13,35 @@ interface Props {
 }
 
 export function Player({ song, settings }: Props): React.ReactElement {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hostRef = useRef<YouTubeHost | null>(null);
-  const posRef = useRef(0);
-  const playingRef = useRef(false);
-  const videoSyncAtRef = useRef(0);
-
-  const VIDEO_DRIFT_LIMIT = 0.4;
-  const VIDEO_RESYNC_COOLDOWN = 2000;
-
-  const [ytReady, setYtReady] = useState(false);
-  const [decoding, setDecoding] = useState(true);
-  const [decodeError, setDecodeError] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(song.duration || 0);
-  const [bump, setBump] = useState(0);
-  const [position, setPosition] = useState(0);
-  const [buffers, setBuffers] = useState<BufferMap>({});
-
-  const [vols, setVols] = useState<Partial<Record<StemId, number>>>({});
-  const [pans, setPans] = useState<StemPanMap>({});
-  const [panError, setPanError] = useState<string | null>(null);
-  const pansRef = useRef<StemPanMap>({});
-  const panSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPan = useRef<{ videoId: string; pans: StemPanMap } | null>(null);
-  const panGeneration = useRef(0);
-  const panRevision = useRef(0);
-  const [mutes, setMutes] = useState<Set<StemId>>(new Set());
-  const [solos, setSolos] = useState<Set<StemId>>(new Set());
-  const [master, setMaster] = useState(0.9);
-  const [preset, setPreset] = useState<PresetId | "custom">("karaoke");
+  const {
+    state,
+    togglePlay,
+    seekTo,
+    setVolume,
+    setPan,
+    toggleMute,
+    toggleSolo,
+    setMaster,
+    applyPreset,
+    exportStem,
+    hostRef,
+    containerRef,
+    posRef,
+    playingRef,
+    videoSyncAtRef,
+    getPosition,
+  } = usePlayer(song, settings);
 
   const { showLyrics, toggleLyric, lyrics } = useLyrics();
 
-  const stemMeta = useMemo(
-    () => buildStemMeta(Object.keys(buffers) as StemId[]),
-    [buffers],
-  );
-
-  // local files have no video to sync: the player runs audio-only, with a
-  // placeholder panel where the YouTube iframe would be
   const isLocal = song.source === "local";
   const youtubeUrl = isLocal
     ? null
     : `https://www.youtube.com/watch?v=${song.videoId}`;
-  // stems always play locally from the library; hiding the video just stops
-  // streaming it from YouTube (and switches thumbnails to the local cache)
   const showVideo = !(settings?.hideVideo ?? false) && !isLocal;
 
-  // Default to karaoke on every song load. Re-applies once stemMeta is
-  // populated (buffers loaded) so solos are set against the actual stems.
-  useEffect(() => {
-    applyPreset("karaoke");
-  }, [song.title, stemMeta]);
-
-  useEffect(() => {
-    const generation = ++panGeneration.current;
-    setPans({});
-    pansRef.current = {};
-    setPanError(null);
-    posRef.current = 0;
-    setPlaying(false);
-    playingRef.current = false;
-    videoSyncAtRef.current = 0;
-    setYtReady(false);
-    setDecodeError(null);
-    setBuffers({});
-    setDuration(song.duration || 0);
-    setVols({});
-    setMutes(new Set());
-    setSolos(new Set());
-    setPreset("karaoke");
-    engine.stopAll();
-
-    let cancelled = false;
-    const flushPan = (): void => {
-      if (panSaveTimer.current !== null) clearTimeout(panSaveTimer.current);
-      panSaveTimer.current = null;
-      const pending = pendingPan.current;
-      pendingPan.current = null;
-      if (pending) {
-        void window.stemkit.setStemPan(pending.videoId, pending.pans).catch(
-          () => {},
-        );
-      }
-    };
-    window.addEventListener("beforeunload", flushPan);
-    setDecoding(true);
-    Promise.all([
-      getDecoded(song.videoId),
-      window.stemkit.getStemPan(song.videoId).catch(() => {
-        if (!cancelled) {
-          setPanError("Could not load saved pan settings. Using center.");
-        }
-        return {} as StemPanMap;
-      }),
-    ])
-      .then(([decoded, savedPan]) => {
-        if (cancelled) return;
-        const initialPans = Object.fromEntries(
-          Object.keys(decoded).map((id) => {
-            const value = savedPan[id as StemId];
-            return [
-              id,
-              typeof value === "number" && Number.isFinite(value)
-                ? Math.max(-1, Math.min(1, value))
-                : 0,
-            ];
-          }),
-        ) as StemPanMap;
-        pansRef.current = initialPans;
-        setPans(initialPans);
-        setBuffers(decoded);
-        engine.setBuffers(decoded);
-        setVols(Object.fromEntries(Object.keys(decoded).map((id) => [id, 1])));
-        const d = engine.trackDuration();
-        if (d > 0) setDuration(d);
-        setDecoding(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setDecoding(false);
-        setDecodeError(err instanceof Error ? err.message : String(err));
-      });
-
-    return () => {
-      cancelled = true;
-      if (panGeneration.current === generation) ++panGeneration.current;
-      window.removeEventListener("beforeunload", flushPan);
-      flushPan();
-      engine.stopAll();
-      hostRef.current?.destroy();
-      hostRef.current = null;
-    };
-  }, [song.videoId]);
-
-  useEffect(() => {
-    if (!showVideo) {
-      hostRef.current?.destroy();
-      hostRef.current = null;
-      setYtReady(false);
-      return;
-    }
-    if (decoding || decodeError || hostRef.current) return;
-    let disposed = false;
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Ensure any stray YouTube player (e.g., from preview) is destroyed
-    window.dispatchEvent(new CustomEvent("preview:pause"));
-
-    const host = new YouTubeHost();
-    hostRef.current = host;
-    void host
-      .mount(container, song.videoId, (state: YTState) => {
-        if (disposed || !engine.hasBuffers()) return;
-        if (state === "playing") {
-          videoSyncAtRef.current = 0;
-          if (!playingRef.current) {
-            host.pause();
-          }
-        }
-      })
-      .then(() => {
-        if (!disposed) setYtReady(true);
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [song.videoId, decoding, decodeError, showVideo]);
-
-  useEffect(() => {
-    engine.applyMix(vols, mutes, solos, master, pans);
-  }, [vols, mutes, solos, master, pans]);
-
-  const changePan = (id: StemId, value: number): void => {
-    const next = { ...pansRef.current, [id]: value };
-    pansRef.current = next;
-    setPans(next);
-    const generation = panGeneration.current;
-    const revision = ++panRevision.current;
-    pendingPan.current = { videoId: song.videoId, pans: next };
-    if (panSaveTimer.current !== null) clearTimeout(panSaveTimer.current);
-    panSaveTimer.current = setTimeout(() => {
-      panSaveTimer.current = null;
-      const pending = pendingPan.current;
-      pendingPan.current = null;
-      if (!pending) return;
-      void window.stemkit.setStemPan(pending.videoId, pending.pans).then(() => {
-        if (
-          generation === panGeneration.current &&
-          revision === panRevision.current
-        ) setPanError(null);
-      }).catch(() => {
-        if (
-          generation === panGeneration.current &&
-          revision === panRevision.current
-        ) {
-          setPanError(
-            "Could not save pan settings. Your live pan is still applied.",
-          );
-        }
-      });
-    }, 250);
-  };
-
-  useEffect(() => {
-    if (!playing) return;
-    let raf = 0;
-    const tick = (): void => {
-      const pos = engine.expected();
-      posRef.current = pos;
-      setPosition(pos);
-
-      const dur = engine.trackDuration();
-      if (dur > 0 && pos >= dur - 0.03) {
-        posRef.current = dur;
-        setPosition(dur);
-        engine.stopAll();
-        playingRef.current = false;
-        setPlaying(false);
-        hostRef.current?.pause();
-        setBump((n) => n + 1);
-        return;
-      }
-
-      const now = performance.now();
-      if (now - videoSyncAtRef.current > VIDEO_RESYNC_COOLDOWN) {
-        const v = hostRef.current?.time() ?? 0;
-        if (Math.abs(v - posRef.current) > VIDEO_DRIFT_LIMIT) {
-          videoSyncAtRef.current = now;
-          hostRef.current?.seek(posRef.current);
-        }
-      }
-    };
-    const loop = (): void => {
-      tick();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    const backup = setInterval(tick, 400);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearInterval(backup);
-    };
-  }, [playing]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const d = hostRef.current?.duration() ?? 0;
-      if (d > 0) {
-        setDuration((prev) => (Math.abs(prev - d) > 0.5 ? d : prev));
-      }
-    }, 600);
-    return () => clearInterval(id);
-  }, []);
-
-  const togglePlay = useCallback((): void => {
-    if (decoding || decodeError) return;
-    if (playingRef.current) {
-      playingRef.current = false;
-      engine.setPlaying(false, posRef.current);
-      hostRef.current?.pause();
-      setPlaying(false);
-    } else {
-      playingRef.current = true;
-      engine.resume();
-      engine.setPlaying(true, posRef.current);
-      hostRef.current?.play();
-      setPlaying(true);
-    }
-  }, [decoding, decodeError, showVideo]);
-
-  const seekTo = useCallback(
-    (t: number): void => {
-      const clamped = Math.max(
-        0,
-        Math.min(duration > 0 ? duration - 0.05 : t, t),
-      );
-      posRef.current = clamped;
-      engine.setPlaying(playingRef.current, clamped);
-      videoSyncAtRef.current = performance.now();
-      hostRef.current?.seek(clamped);
-      setBump((n) => n + 1);
-    },
-    [duration],
-  );
-
-  const getPosition = useCallback((): number => {
-    void bump;
-    return position;
-  }, [bump, position]);
-
-  const exportStem = useCallback(
-    (stem: string): void => {
-      void window.stemkit.exportStem(song.videoId, stem);
-    },
-    [song.videoId],
-  );
-
-  const applyPreset = (p: PresetId): void => {
-    setPreset(p);
-    setMutes(new Set());
-    if (p === "all" || p === "karaoke-low") {
-      setSolos(new Set());
-      if (p === "karaoke-low") {
-        // Set vocals to 40% while keeping other stems at 100%
-        setVols((prev) => ({ ...prev, vocals: 0.2 }));
-      }
-    } else if (p === "karaoke") {
-      setSolos(
-        new Set<StemId>(
-          stemMeta.filter((s) => s.id !== "vocals").map((s) => s.id),
-        ),
-      );
-    } else if (p === "acapella") setSolos(new Set<StemId>(["vocals"]));
-    else if (p === "drumnbass") setSolos(new Set<StemId>(["drums", "bass"]));
-  };
-
-  const toggleMute = useCallback(
-    (id: StemId): void => {
-      setPreset("custom");
-      const turningOn = !mutes.has(id);
-      if (turningOn && solos.has(id)) {
-        setSolos((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-      setMutes((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-    },
-    [mutes, solos],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        togglePlay();
-        return;
-      }
-      const lane = STEM_KEYS.indexOf(e.key);
-      if (
-        lane !== -1 && lane < stemMeta.length && !e.altKey && !e.ctrlKey &&
-        !e.metaKey
-      ) {
-        toggleMute(stemMeta[lane].id);
-      } else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
-        if (decoding || decodeError) return;
-        e.preventDefault();
-        const step = e.shiftKey ? 15 : 5;
-        seekTo(posRef.current + (e.code === "ArrowLeft" ? -step : step));
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, toggleMute, stemMeta, seekTo, decoding, decodeError]);
-
-  const toggleSolo = (id: StemId): void => {
-    setPreset("custom");
-    const turningOn = !solos.has(id);
-    if (turningOn && mutes.has(id)) {
-      setMutes((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-    setSolos((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const VIDEO_DRIFT_LIMIT = 0.4;
+  const VIDEO_RESYNC_COOLDOWN = 2000;
 
   return (
     <div className="h-full flex flex-col">
@@ -437,20 +57,22 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 <div className="absolute -inset-6 bg-violet-500/10 blur-3xl rounded-full pointer-events-none" />
                 <div className="absolute inset-0 rounded-xl overflow-hidden ring-1 ring-white/10 bg-black shadow-2xl shadow-black/60 aspect-video">
                   <div
-                    ref={containerRef}
+                    ref={(el) => {
+                      (containerRef as any).current = el;
+                    }}
                     className="absolute inset-0 [&_iframe]:w-full [&_iframe]:h-full"
                   />
-                  {!ytReady && (
+                  {!state.ytReady && (
                     <div className="absolute inset-0 flex items-center justify-center animate-pulse">
                       <span className="text-[10px] text-white/40 tracking-widest uppercase">
                         loading…
                       </span>
                     </div>
                   )}
-                  {decodeError && (
+                  {state.decodeError && (
                     <div className="absolute inset-x-3 bottom-3 flex justify-center rise-in">
                       <div className="glass rounded-lg px-3 py-1.5 text-xs text-rose-300 break-words">
-                        {decodeError}
+                        {state.decodeError}
                       </div>
                     </div>
                   )}
@@ -458,13 +80,11 @@ export function Player({ song, settings }: Props): React.ReactElement {
                   {showLyrics && lyrics && lyrics.lines.length > 0 && (
                     <LyricsOverlay
                       settings={settings}
-                      playing={playing}
+                      playing={state.phase === "playing"}
                       posRef={posRef}
                       playingRef={playingRef}
                       videoSyncAtRef={videoSyncAtRef}
                       hostRef={hostRef}
-                      setBump={setBump}
-                      setPlaying={setPlaying}
                       VIDEO_DRIFT_LIMIT={VIDEO_DRIFT_LIMIT}
                       VIDEO_RESYNC_COOLDOWN={VIDEO_RESYNC_COOLDOWN}
                     />
@@ -503,55 +123,56 @@ export function Player({ song, settings }: Props): React.ReactElement {
           {showLyrics && <LyricSelection />}
 
           <Transport
-            playing={playing}
-            duration={duration}
+            playing={state.phase === "playing"}
+            duration={state.duration}
             getPosition={getPosition}
             onTogglePlay={togglePlay}
             onSeek={seekTo}
-            preset={preset === "custom" ? "karaoke" : preset}
+            preset={state.preset === "custom" ? "karaoke" : state.preset}
             onPreset={applyPreset}
-            master={master}
+            master={state.master}
             onMaster={setMaster}
             youtubeUrl={youtubeUrl ?? undefined}
           />
 
-          {panError && (
+          {state.panError && (
             <p role="status" className="mt-3 text-xs text-amber-300">
-              {panError}
+              {state.panError}
             </p>
           )}
           {
             <div className="mt-4 space-y-2">
-              {decoding
+              {state.phase === "decoding"
                 ? [...Array(4)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="glass rounded-xl h-16 animate-pulse"
-                    style={{ animationDelay: `${i * 120}ms` }}
-                  />
-                ))
-                : stemMeta.map((meta) => (
-                  <StemLane
-                    key={meta.id}
-                    meta={meta}
-                    buffer={buffers[meta.id] ?? null}
-                    duration={duration}
-                    getPosition={getPosition}
-                    audible={!mutes.has(meta.id) &&
-                      (solos.size === 0 || solos.has(meta.id))}
-                    volume={vols[meta.id] ?? 1}
-                    pan={pans[meta.id] ?? 0}
-                    onPan={(value) => changePan(meta.id, value)}
-                    muted={mutes.has(meta.id)}
-                    soloed={solos.has(meta.id)}
-                    onToggleMute={() => toggleMute(meta.id)}
-                    onToggleSolo={() => toggleSolo(meta.id)}
-                    onVolume={(v) =>
-                      setVols((prev) => ({ ...prev, [meta.id]: v }))}
-                    onSeek={seekTo}
-                    onExport={() => exportStem(meta.id)}
-                  />
-                ))}
+                    <div
+                      key={i}
+                      className="glass rounded-xl h-16 animate-pulse"
+                      style={{ animationDelay: `${i * 120}ms` }}
+                    />
+                  ))
+                : state.stemMeta.map((meta) => (
+                    <StemLane
+                      key={meta.id}
+                      meta={meta}
+                      buffer={state.buffers[meta.id] ?? null}
+                      duration={state.duration}
+                      getPosition={getPosition}
+                      audible={
+                        !state.mutes.has(meta.id) &&
+                        (state.solos.size === 0 || state.solos.has(meta.id))
+                      }
+                      volume={state.vols[meta.id] ?? 1}
+                      pan={state.pans[meta.id] ?? 0}
+                      onPan={(value) => setPan(meta.id, value)}
+                      muted={state.mutes.has(meta.id)}
+                      soloed={state.solos.has(meta.id)}
+                      onToggleMute={() => toggleMute(meta.id)}
+                      onToggleSolo={() => toggleSolo(meta.id)}
+                      onVolume={(v) => setVolume(meta.id, v)}
+                      onSeek={seekTo}
+                      onExport={() => exportStem(meta.id)}
+                    />
+                  ))}
             </div>
           }
         </div>

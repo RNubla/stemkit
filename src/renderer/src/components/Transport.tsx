@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { fmtTime } from '../lib/format'
 import { PlayIcon, PauseIcon, ExternalIcon } from './Icons'
 
-export type PresetId = 'all' | 'karaoke' | 'karaoke-low' | 'acapella' | 'drumnbass'
+export type PresetId = 'all' | 'karaoke' | 'karaoke-low' | 'acapella' | 'drumnbass';
 
-const PRESETS: { id: PresetId; label: string }[] = [
+export const PRESETS: { id: PresetId; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'karaoke', label: 'Karaoke' },
   { id: 'karaoke-low', label: 'Karaoke (low vocal)' },
