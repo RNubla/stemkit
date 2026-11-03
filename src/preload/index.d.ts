@@ -1,8 +1,8 @@
-import type { StemKitApi } from '../shared/types'
+import type { KaraokeApi } from '../shared/types'
 
 declare global {
   interface Window {
-    stemkit: StemKitApi
+    stemkit: KaraokeApi
   }
 }
 

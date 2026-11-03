@@ -282,7 +282,7 @@ function showAboutWindow(): void {
 
 function installApplicationMenu(): void {
   const aboutItem: MenuItemConstructorOptions = {
-    label: "About StemKit",
+    label: "About Karaoke",
     click: showAboutWindow,
   };
   const template: MenuItemConstructorOptions[] = process.platform === "darwin"
@@ -329,7 +329,7 @@ function requireExportFfmpeg(): string {
   const ffmpeg = getStatus().ffmpeg.path;
   if (!ffmpeg) {
     throw new Error(
-      "Something went wrong with the built-in audio tools. Try reinstalling StemKit.",
+      "Something went wrong with the built-in audio tools. Try reinstalling Karaoke.",
     );
   }
   return ffmpeg;
@@ -413,7 +413,7 @@ app.whenReady().then(async () => {
   // self-test mode for the windows-smoke CI job: bootstrap, separate a
   // generated tone through both engines, exercise the GPU plumbing
   // (cuda fail-fast paths + CUDA engine install), exit 0/1 without a window
-  if (process.env.STEMKIT_SMOKE === "1") {
+  if (process.env.KARAOKE_SMOKE === "1") {
     const ok = await runSmoke();
     app.exit(ok ? 0 : 1);
     return;
@@ -717,9 +717,9 @@ app.whenReady().then(async () => {
       const youtube = ["youtube.com", "www.youtube.com", "youtu.be"].includes(
         url.hostname,
       );
-      const website = url.hostname === "stemkit.pages.dev";
+      const website = url.hostname === "karaoke.pages.dev";
       const projectGithub = url.hostname === "github.com" &&
-        /^\/danielravina\/stemkit(?:\/|$)/.test(url.pathname);
+        /^\/danielravina\/karaoke(?:\/|$)/.test(url.pathname);
       if (url.protocol === "https:" && (youtube || website || projectGithub)) {
         shell.openExternal(url.toString());
       }
